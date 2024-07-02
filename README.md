@@ -2,7 +2,7 @@
 
 ![Quamba](misc/Quamba.png)
 
-⚡8-bit quantization (W8A8) for mamba blocks 🚀1.7 $ \times $ speedup on Orin Nano 8G 🔻 2 $ \times $ memory reduction
+⚡8-bit quantization (W8A8) for mamba blocks 🚀1.7 $\times$ speedup on Orin Nano 8G 🔻 2 $\times$ memory reduction
 
 
 ## Real-time Generation on a NVIDIA Orin Nano 8G
