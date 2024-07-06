@@ -32,12 +32,12 @@ except ImportError:
 from mamba_ssm.modules import mamba_simple
 
 
-from fake_quant.qActLayer import QAct
-from fake_quant.qLinearLayer import QLinearLayer
-from fake_quant.qConvLayer import QConv1D
-from fake_quant.qSelectiveScan import QSScan
-from fake_quant.rotation_utils import HadamardTransform
-from fake_quant.smooth_quant_utils import SmoothModule
+from quamba.fake_quant.qActLayer import QAct
+from quamba.fake_quant.qLinearLayer import QLinearLayer
+from quamba.fake_quant.qConvLayer import QConv1D
+from quamba.fake_quant.qSelectiveScan import QSScan
+from quamba.fake_quant.rotation_utils import HadamardTransform
+from quamba.fake_quant.smooth_quant_utils import SmoothModule
 
 class QMamba(nn.Module):
     def __init__(

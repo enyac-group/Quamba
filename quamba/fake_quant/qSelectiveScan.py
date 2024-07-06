@@ -16,10 +16,10 @@ except ImportError:
     print("[WARNING] Failed to import quant_sscan_cuda, please run `pip install -e .`")
     quant_sscan_cuda = None
 
-from fake_quant.quantUtils import dynamic_per_tensor_absmax_quantization
-from fake_quant.qActLayer import QAct
-from fake_quant.rotation_utils import HadamardTransform
-from fake_quant.smooth_quant_utils import SmoothModule
+from quamba.fake_quant.quantUtils import dynamic_per_tensor_absmax_quantization
+from quamba.fake_quant.qActLayer import QAct
+from quamba.fake_quant.rotation_utils import HadamardTransform
+from quamba.fake_quant.smooth_quant_utils import SmoothModule
 
 #Fake W8A8B8O8 QSScan
 class QSScan(nn.Module):

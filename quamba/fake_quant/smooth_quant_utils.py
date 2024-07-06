@@ -5,7 +5,7 @@ import logging
 from datasets import load_dataset
 from mamba_ssm.utils.generation import InferenceParams
 from tqdm import tqdm
-from fake_quant.qLinearLayer import QLinearLayer
+from quamba.fake_quant.qLinearLayer import QLinearLayer
 
 class SmoothModule(nn.Module):
     def __init__(self, weight_to_smooth, tensor_name=None):

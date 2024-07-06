@@ -2,11 +2,11 @@ import unittest
 import sys
 sys.path.append('.')
 import torch
-from fake_quant.smooth_quant_utils import SmoothModule, smooth_mamba
-from fake_quant.qLinearLayer import QLinearLayer
-from fake_quant.configuration_jamba import JambaConfig
-from fake_quant.jamba_simple import JambaMambaMixer
-from fake_quant.qJamba import QJambaMambaMixer
+from quamba.fake_quant.smooth_quant_utils import SmoothModule, smooth_mamba
+from quamba.fake_quant.qLinearLayer import QLinearLayer
+from quamba.fake_quant.configuration_jamba import JambaConfig
+from quamba.fake_quant.jamba_simple import JambaMambaMixer
+from quamba.fake_quant.qJamba import QJambaMambaMixer
 from transformers import AutoTokenizer
 
 class SmoothQuantModuleTestCase(unittest.TestCase):

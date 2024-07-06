@@ -1,5 +1,5 @@
 import torch
-from fake_quant.quantUtils import _get_quant_range
+from quamba.fake_quant.quantUtils import _get_quant_range
 import numpy as np
 import logging
 def lp_loss(pred, tgt, p=2.0, reduction='none'):
@@ -112,66 +112,17 @@ class PerTensorPercentileObserver:
             n_bits=self.n_bits,
             clip_ratio=self.clip_ratio
         )
-    
-# class PerTensorOmseObserver:
-#     def __init__(self, n_bits, clip_ratio):
-#         self.n_bits = n_bits
-#         self.clip_ratio = clip_ratio
-#         self.w_max = None
-#         self.has_statistic = False
-#         self.eps = 1e-5
-
-#     def update(self, w):
-#         self.has_statistic = True
-#         #assert w.dim() == 2, "Observer only support 2d tensor, please handle the shape outside."
         
-#         comming_max = w.abs().amax().clamp(min=1e-5)
-#         if self.w_max is None:
-#             self.w_max = comming_max
-#         else:
-#             self.w_max = torch.max(comming_max, self.w_max)
-        
-#     def get_quantization_parameters(self, inputs):
-#         assert self.has_statistic, "Please run the invoke the update() once before getting statistic."
-#         q_min, q_max = _get_quant_range(n_bits=self.n_bits, sym=True)
-        
-#         best_score = 1e+10
-
-#         for i in range(90):
-#             new_max = w_max * (1.0 - (i * 0.01))
-
-#             new_scale = torch.ones_like(w_max, dtype=torch.float32)
-#             new_scale = new_max / (q_max - q_min)
-#             new_scale.clamp(self.eps)
-
-#             inputs_q = inputs  / new_scale
-#             inputs_q = torch.round(inputs_q)
-#             inputs_q = torch.clamp(inputs_q, q_min, q_max)
-#             inputs_q *= new_scale
-
-#             score = lp_loss(inputs, inputs_q, p=2.0, reduction='all')
-#             if score < best_score:
-#                 best_score = score
-#                 w_max = new_max
-#                 scales = new_scale
-
-#         return scales
-
-
-
 def build_observer(observer_type, n_bits, clip_ratio,sym,
         percentile_sigma=0.01, percentile_alpha=0.99999
     ):
     if observer_type == "PerTensorMinmaxObserver":
         return PerTensorMinmaxObserver(n_bits, clip_ratio, sym)
     elif observer_type == "PerTensorPercentileObserver":
-        logging.debug("Set up PerTensorPercentileObserver with sigma: %.4f, alpha: %.4f" % (percentile_sigma, percentile_alpha))
+        logging.debug("Set up PerTensorPercentileObserver with sigma: %.4f, alpha: %.5f" % (percentile_sigma, percentile_alpha))
         return PerTensorPercentileObserver(
             n_bits, clip_ratio, sym, 
             percentile_sigma=percentile_sigma, percentile_alpha=percentile_alpha
         )
-    
-    # elif observer_type == "PerTensorOmseObserver":
-    #     return PerTensorOmseObserver(*args, **kwargs)
     else:
         raise ValueError("Invalid observer type")

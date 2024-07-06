@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from functools import partial
-from fake_quant.quantUtils import dynamic_per_tensor_absmax_quantization
+from quamba.fake_quant.quantUtils import dynamic_per_tensor_absmax_quantization
 
 #W8A8BFP32OFP32Linear
 class QLinearLayer(nn.Module):
