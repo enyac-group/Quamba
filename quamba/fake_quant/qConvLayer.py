@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from functools import partial
-from fake_quant.quantUtils import dynamic_per_tensor_absmax_quantization
+from quamba.fake_quant.quantUtils import dynamic_per_tensor_absmax_quantization
 
 
 class QConv1D(nn.Module):

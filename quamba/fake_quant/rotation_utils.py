@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import math
 from fast_hadamard_transform import hadamard_transform
-from fake_quant.hadamard_utils import matmul_hadU_cuda, get_hadK
+from quamba.fake_quant.hadamard_utils import matmul_hadU_cuda, get_hadK
 
 def random_orthogonal_matrix(size, device):
     """

@@ -130,18 +130,16 @@ python profile_mamba.py state-spaces/mamba-2.8b  --act_scales_cache mamba-2.8b_s
 
 ## Fake Quantization Evaluation
 We support fake quantization simulation for mamba models. To evaluate the performance of the quantized model using fake quantization on lambada_openai (--eval_zero_shot) , you can run the following command:
-+ Static quantization, only u_quant and ssm_out are dynamic quantization:
 ```
 python main.py state-spaces/mamba-130m fake \
+--do_hadamard \
+--do_percentile_u \
 --batch_size 16 \
 --task_list lambada_openai \
---q_configs ./configs/mamba/all_static/had/percentile/had_all_static_u_percentile.json \
---do_calibrate \
 --eval_zero_shot \
 --log_dir logs
 ```
-User can specify the corresponding quantization setting following the files inside `configs` folder.
-
+User may optionally add `--do_hadamard` and `--do_percentile_u` to enable hadamard transform and percentile u quantization for the ssm's output and input, respectively.
 
 ## Real Quantization Evaluation
 Real quantization only supports `static` quantization, percentile u tensor, and hadamard transform at ssm out with `batch_size = 1`. To evaluate the performance of the quantized model using real quantization on lambada_openai (--eval_zero_shot), you can run the following command:
@@ -151,7 +149,6 @@ python main.py state-spaces/mamba-130m real \
 --act_scales_cache mamba-130m_scales.pt \
 --batch_size 1 \
 --task_list lambada_openai \
---do_calibrate \
 --eval_zero_shot \
 --log_dir logs
 ```

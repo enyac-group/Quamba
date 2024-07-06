@@ -1,6 +1,6 @@
 import torch, math
 import fast_hadamard_transform
-from fake_quant.qLinearLayer import QLinearLayer
+from quamba.fake_quant.qLinearLayer import QLinearLayer
 # Adapted from https://github.com/Cornell-RelaxML/quip-sharp/blob/main/lib/utils/matmul_had.py
 
 def get_hadK(n, transpose=False):

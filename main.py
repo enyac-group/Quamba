@@ -43,7 +43,6 @@ def main(args):
             with open(log_paths, 'a') as fp:
                 logging.info(f"Saving result to {log_paths}")
                 json.dump(logs, fp, indent=4)
-        # exit
         return
 
     """
@@ -55,7 +54,7 @@ def main(args):
         model = rlq_mamba(model, model_type, tokenizer, "cuda", args)
     elif args.quant_type.lower() == "fake":
         from quamba.fake_quant.modelutils_mamba import quantize_model_mamba as faq_mamba
-        model = faq_mamba(model, model_type, tokenizer, "cuda", args, quantization_config)
+        model = faq_mamba(model, model_type, tokenizer, "cuda", args)
     else:
         logging.error(f"Unrecognized quantization type: {args.quant_type}")
     model.eval()

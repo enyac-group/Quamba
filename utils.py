@@ -75,6 +75,14 @@ def parse_options():
         help='Whether to smooth the model (smoothQuant)'
     )
     parser.add_argument(
+        '--do_hadamard', action='store_true', default=False,
+        help='Whether to apply hadamard transform (hadQuant)'
+    )
+    parser.add_argument(
+        '--do_percentile_u', action='store_true', default=False,
+        help='Whether to use percentile_u for calibrating SSMs inputs'
+    )
+    parser.add_argument(
         '--batch_size', type=int, default=1,
         help='Batch size for evaluation'
     )

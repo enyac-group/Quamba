@@ -51,14 +51,14 @@ from transformers.utils import (
     replace_return_docstrings,
 )
 from transformers.utils.import_utils import is_torch_fx_available
-from fake_quant.configuration_jamba import JambaConfig
-from fake_quant.jamba_simple import PreTrainedModel
-from fake_quant.qActLayer import QAct
-from fake_quant.qLinearLayer import QLinearLayer
-from fake_quant.qConvLayer import QConv1D
-from fake_quant.qSelectiveScan import QSScan
-from fake_quant.rotation_utils import HadamardTransform
-from fake_quant.smooth_quant_utils import SmoothModule
+from quamba.fake_quant.configuration_jamba import JambaConfig
+from quamba.fake_quant.jamba_simple import PreTrainedModel
+from quamba.fake_quant.qActLayer import QAct
+from quamba.fake_quant.qLinearLayer import QLinearLayer
+from quamba.fake_quant.qConvLayer import QConv1D
+from quamba.fake_quant.qSelectiveScan import QSScan
+from quamba.fake_quant.rotation_utils import HadamardTransform
+from quamba.fake_quant.smooth_quant_utils import SmoothModule
 
 # try except block so it'll work with trust_remote_code. Later we can have `if is_flash_attn_2_available():`
 try:
@@ -863,7 +863,7 @@ class QJambaMambaMixer(nn.Module):
     and is why Mamba is called **selective** state spaces)
     """
 
-    def __init__(self, original_layer, act_quant=True):
+    def __init__(self, original_layer):
         super().__init__()
         self.config = original_layer.config
         self.layer_idx = original_layer.layer_idx
@@ -914,12 +914,6 @@ class QJambaMambaMixer(nn.Module):
         self.x_proj = QLinearLayer(originalLayer=original_layer.x_proj)
         self.dt_proj = QLinearLayer(originalLayer=original_layer.dt_proj)
         self.out_proj = QLinearLayer(originalLayer=original_layer.out_proj)
-
-        # self.conv1d = original_layer.conv1d
-        # self.in_proj = original_layer.in_proj
-        # self.x_proj = original_layer.x_proj
-        # self.dt_proj = original_layer.dt_proj
-        # self.out_proj = original_layer.out_proj
         
         smooth=True
         if smooth:
@@ -933,30 +927,15 @@ class QJambaMambaMixer(nn.Module):
             self.dt_smooth = lambda x: x
             self.ssm_out_smooth = lambda x: x
         
-        if act_quant:
-            self.mamba_in_quant = QAct(tensor_name="mamba_in_quant")
-            self.conv_in_quant = QAct(tensor_name="conv_in_quant")
-            self.dt_quant = QAct(tensor_name="dt_quant")
-            self.B_quant = QAct(tensor_name="B_quant")
-            self.C_quant = QAct(tensor_name="C_quant")
-            #self.D_quant = QAct(n_bits=self.w_bits, clip_ratio=w_clip_ratio, real_quant=False)
-            self.z_quant = QAct(tensor_name="z_quant")
-            self.u_quant = QAct(tensor_name="u_quant")
-            self.ssm_out_quant = QAct(tensor_name="ssm_out_quant")
-            self.ssm_out_had = HadamardTransform()
-        else:
-            self.mamba_in_quant = lambda x: x
-            self.conv_in_quant = lambda x: x
-            self.dt_quant = lambda x: x
-            self.B_quant = lambda x: x
-            self.C_quant = lambda x: x
-            #self.D_quant = lambda x: x
-            self.z_quant = lambda x: x
-            self.u_quant = lambda x: x
-            self.ssm_out_quant = lambda x: x
-            self.ssm_out_had = lambda x: x
-
-        
+        self.mamba_in_quant = QAct(tensor_name="mamba_in_quant")
+        self.conv_in_quant = QAct(tensor_name="conv_in_quant")
+        self.dt_quant = QAct(tensor_name="dt_quant")
+        self.B_quant = QAct(tensor_name="B_quant")
+        self.C_quant = QAct(tensor_name="C_quant")
+        self.z_quant = QAct(tensor_name="z_quant")
+        self.u_quant = QAct(tensor_name="u_quant")
+        self.ssm_out_quant = QAct(tensor_name="ssm_out_quant")
+        self.ssm_out_had = HadamardTransform()
 
     def _apply_layernorms(self, dt, B, C):
         if self.dt_layernorm is not None:

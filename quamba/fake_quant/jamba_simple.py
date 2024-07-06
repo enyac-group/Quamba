@@ -51,7 +51,7 @@ from transformers.utils import (
     replace_return_docstrings,
 )
 from transformers.utils.import_utils import is_torch_fx_available
-from fake_quant.configuration_jamba import JambaConfig
+from quamba.fake_quant.configuration_jamba import JambaConfig
 
 
 # try except block so it'll work with trust_remote_code. Later we can have `if is_flash_attn_2_available():`

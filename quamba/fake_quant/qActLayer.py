@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from functools import partial
-from fake_quant.quantUtils import (
+from quamba.fake_quant.quantUtils import (
     bached_dynamic_per_tensor_absmax_quantization, 
     dynamic_per_token_absmax_quantization,
     uniform_affine_fake_quantization,
