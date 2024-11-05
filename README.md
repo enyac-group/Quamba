@@ -1,4 +1,4 @@
-# Quamba: Post-training Quantization for Selective State Space Models
+# Quamba: A Post-Training Quantization Recipe for Selective State Space Models
 
 [Hung-Yueh Chiang](https://hychiang.info/),
 [Chi-Chih Chang](https://github.com/shadowpa0327),
