@@ -1,8 +1,17 @@
 # Quamba: Post-training Quantization for Selective State Space Models
 
-![Quamba](misc/Quamba.png)
+[Hung-Yueh Chiang](https://hychiang.info/),
+[Chi-Chih Chang](https://github.com/shadowpa0327),
+[Natalia Frumkin](https://www.nfrumkin.com),
+[Kai-Chiang Wu](https://people.cs.nycu.edu.tw/~kcw/),
+[Diana Marculescu](https://users.ece.utexas.edu/~dianam/)
+
+[![arXiv](https://img.shields.io/badge/arXiv-2410.13229-b31b1b.svg)](https://arxiv.org/pdf/2410.13229)
+[![Project Page](https://img.shields.io/badge/Project-Website-orange)](https://hychiang.info/projects/quamba/)
+
 
 ⚡8-bit quantization (W8A8) for mamba blocks 🚀1.7 $\times$ speedup on Orin Nano 8G 🔻 2 $\times$ memory reduction
+![Quamba](misc/Quamba.png)
 
 
 ## Real-time Generation on a NVIDIA Orin Nano 8G
@@ -152,3 +161,13 @@ python main.py state-spaces/mamba-130m real \
 --eval_zero_shot \
 --log_dir logs
 ```
+
+# Citation
+```
+@article{chiang2024quamba,
+  title={Quamba: A Post-Training Quantization Recipe for Selective State Space Models},
+  author={Chiang, Hung-Yueh and Chang, Chi-Chih and Frumkin, Natalia and Wu, Kai-Chiang and Marculescu, Diana},
+  journal={arXiv preprint arXiv:2410.13229},
+  year={2024}
+}
+````
