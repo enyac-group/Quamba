@@ -29,7 +29,6 @@ def build_mamba_and_tokenizer(args, model_type="mamba"):
             tokenizer = _GPTSentencePieceTokenizer(tokenizer_ckpt)
         model = MambaLMHeadModel.from_pretrained(args.model, device=device, dtype=dtype)
     elif model_type == "quamba" or model_type == "quamba2":
-        assert args.quant_type == "real", "Only support real quantization for quamba"
         assert args.pretrained_dir, "Please specify the --pretrained_dir for quamba models"
         quantized_model_path = os.path.join(args.pretrained_dir, args.model)
         assert os.path.exists(quantized_model_path), f"Quantized model {quantized_model_path} not found"
@@ -55,29 +54,13 @@ def set_deterministic(seed):
     torch.cuda.manual_seed_all(seed)
     random.seed(seed)
     np.random.seed(seed)
-    
-def parse_options(require_quant_type=True):
-    parser = argparse.ArgumentParser()
+
+def get_quantize_options(parser):
+    # quantization parameters
     parser.add_argument(
-        'model', type=str,
-        help='Mamba to load; pass location of hugginface converted checkpoint.'
+        '--quantize', action='store_true', default=False,
     )
-    if require_quant_type:
-        parser.add_argument(
-            'quant_type', choices=["fp16", "w4a8", "w4a16", "w4aX", "w8a8"],
-            help='Execution mode (Options: real, fake, fp16, search)'
-        )
-    parser.add_argument(
-        '--verbose', action='store_true',
-        help='Whether to print the debug level information'
-    )
-    ##### Load/store model and act_scales_cache #####
-    parser.add_argument(
-        '--pretrained_dir', type=str, default=None,
-        help='The path to store both the quantized model and its act_scales_cache.'
-        'Not storing if not provided. (default: None)'
-    )
-    ##### General Evaluation Settings #####
+    # calibration parameters
     parser.add_argument(
         '--calib_data_num', type=int, default=512,
         help='Number of calibration data'
@@ -86,50 +69,13 @@ def parse_options(require_quant_type=True):
         '--calib_seqlen', type=int, default=512,
         help='Number of calibration data'
     )
+    # load/store model
     parser.add_argument(
-        '--batch_size', type=int, default=1,
-        help='Batch size for evaluation'
+        '--pretrained_dir', type=str, default=None,
+        help='The path to store both the quantized model and its act_scales_cache.'
+        'Not storing if not provided. (default: None)'
     )
-    parser.add_argument(
-        '--task_list', type=lambda s: [item for item in s.split(',')], default=["lambada_openai"],
-        help='Task to be evaled, e.g., --task_list lambada_openai,hellaswag,arc_easy,arc_challenge,piqa,winogrande'
-    )
-    parser.add_argument(
-        '--eval_zero_shot', action='store_true', default=False,
-        help='Whether to evaluate the zero-shot performance Task(s) specified by `--tasks_list`, e.g, --tasks_list lambada_openai,hellaswag,arc_easy,arc_challenge,piqa,winogrande'
-    )
-    parser.add_argument(
-        '--eval_few_shot', action='store_true', default=False,
-        help='Whether to evaluate the few-shot performance. Task(s) specified by `--tasks_list` and `--fewshot`'
-    )
-    parser.add_argument(
-        '--fewshot', type=int, default=0,
-        help='Number of shots for few-shot evaluation (0 for zero-shot)'
-    )
-    parser.add_argument(
-        '--eval_generation', action='store_true', default=False,
-        help='Whether to evaluate the performance of the generation tasks. Task(s) specified by `--tasks_list`, e.g, --tasks_list nq_open,squadv2'
-    )
-    parser.add_argument(
-        '--eval_fp16', action='store_true',
-        help='Whether to evaluate the performance of fp16 unquantized model.'
-    )
-    parser.add_argument(
-        '--testing', action='store_true',
-        help='testing with decreased sample count'
-    )
-    parser.add_argument(
-        '--eval_ppl', action='store_true', default=False,
-        help='Whether to evaluate the wikitext2 ppl'
-    )
-    parser.add_argument(
-        '--ppl_dataset', type=str, default='wikitext2',
-        help='Dataset for ppl evaluation'
-    )
-    parser.add_argument(
-        '--log_dir', type=str,
-        help='path to the json log file storing the result of lm_evan and quantization settingarg'
-    )
+    # quantization parameters
     parser.add_argument(
         '--do_reordering',  action='store_true', default=False,
         help='Whether to do the reordering (default: False)'
@@ -166,5 +112,58 @@ def parse_options(require_quant_type=True):
         '--hybrid_blocks_config', type=str, default=None,
         help='Path to the the configuration for hybrid blocks'
     )
+    
+def parse_options():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        'model', type=str,
+        help='Mamba to load; pass location of hugginface converted checkpoint.'
+    )
+    parser.add_argument(
+        '--verbose', action='store_true',
+        help='Whether to print the debug level information'
+    )
+    ##### General Evaluation Settings #####
+    parser.add_argument(
+        '--batch_size', type=int, default=1,
+        help='Batch size for evaluation'
+    )
+    parser.add_argument(
+        '--task_list', type=lambda s: [item for item in s.split(',')], default=["lambada_openai"],
+        help='Task to be evaled, e.g., --task_list lambada_openai,hellaswag,arc_easy,arc_challenge,piqa,winogrande'
+    )
+    parser.add_argument(
+        '--eval_zero_shot', action='store_true', default=False,
+        help='Whether to evaluate the zero-shot performance Task(s) specified by `--tasks_list`, e.g, --tasks_list lambada_openai,hellaswag,arc_easy,arc_challenge,piqa,winogrande'
+    )
+    parser.add_argument(
+        '--eval_few_shot', action='store_true', default=False,
+        help='Whether to evaluate the few-shot performance. Task(s) specified by `--tasks_list` and `--fewshot`'
+    )
+    parser.add_argument(
+        '--fewshot', type=int, default=0,
+        help='Number of shots for few-shot evaluation (0 for zero-shot)'
+    )
+    parser.add_argument(
+        '--eval_generation', action='store_true', default=False,
+        help='Whether to evaluate the performance of the generation tasks. Task(s) specified by `--tasks_list`, e.g, --tasks_list nq_open,squadv2'
+    )
+    parser.add_argument(
+        '--testing', action='store_true',
+        help='testing with decreased sample count'
+    )
+    parser.add_argument(
+        '--eval_ppl', action='store_true', default=False,
+        help='Whether to evaluate the wikitext2 ppl'
+    )
+    parser.add_argument(
+        '--ppl_dataset', type=str, default='wikitext2',
+        help='Dataset for ppl evaluation'
+    )
+    parser.add_argument(
+        '--log_dir', type=str,
+        help='path to the json log file storing the result of lm_evan and quantization settingarg'
+    )
+    get_quantize_options(parser)
     args = parser.parse_args()
     return args

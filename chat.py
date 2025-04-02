@@ -11,6 +11,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 from transformers.generation import TextStreamer
 from mamba_ssm.models.mixer_seq_simple import MambaLMHeadModel
 
+from utils import get_quantize_options
 from quamba.quamba_mixer_seq import QuambaLMHeadModel
 from quamba.modelutils_mamba import quantize_model_mamba
 
@@ -170,62 +171,8 @@ if __name__ =='__main__':
     parser.add_argument(
         '--use_testing_prompts', action='store_true', default=False,
     )
-    # Load/store model and act_scales_cache
-    parser.add_argument(
-        '--pretrained_dir', type=str, default=None,
-        help='The path to store both the quantized model and its act_scales_cache.'
-        'Not storing if not provided. (default: None)'
-    )
-    # quantization parameters
-    parser.add_argument(
-        '--quantize', action='store_true', default=False,
-    )
-    parser.add_argument(
-        '--calib_data_num', type=int, default=512,
-        help='Number of calibration data'
-    )
-    parser.add_argument(
-        '--calib_seqlen', type=int, default=512,
-        help='Number of calibration data'
-    )
-    parser.add_argument(
-        '--do_reordering',  action='store_true', default=False,
-        help='Whether to do the reordering (default: False)'
-    )
-    parser.add_argument(
-        '--apply_gptq',  action='store_true', default=False,
-        help='Whether to apply the GPTQ quantizer (default: False)'
-    )
-    parser.add_argument(
-        '--group_heads',  action='store_true', default=False,
-        help='Whether to group heads during the reordering (default: False)'
-    )
-    parser.add_argument(
-        "--quantize_embedding", action='store_true', default=False,
-        help="Whether to quantize the embedding layer (default: False)"
-    )
-    parser.add_argument(
-        "--quantize_lm_head", action='store_true', default=False,
-        help="Whether to quantize the lm_head layer (default: False)"
-    )
-    parser.add_argument(
-        '--w_bits', type=int, default=8,
-        help='The bit-width for weights applied in the real quantization (defualt: 8)'
-    )
-    parser.add_argument(
-        '--a_bits', type=int, default=8,
-        help='The bit-width for activations applied in the real quantization (defualt: 8)'
-    )
-    parser.add_argument(
-        '--hybrid_blocks', action='store_true', default=False,
-        help='Whether to create hybrid blocks for configuring act_bits of blocks in a dynamic fashion.'
-    )
-    parser.add_argument(
-        '--hybrid_blocks_config', type=str, default=None,
-        help='Path to the the configuration for hybrid blocks'
-    )
+    get_quantize_options(parser)
     args = parser.parse_args()
-
     logging.basicConfig(
         level=logging.INFO,
         format="[%(asctime)s] %(levelname)s [%(filename)s:%(lineno)3d] %(message)s",

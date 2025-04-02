@@ -20,8 +20,7 @@ def main(args):
     model.config.use_cache = False
     logs = {}
     
-    logging.info(f"Evaluating quantization type: {args.quant_type}")
-    if not args.quant_type.lower() == "fp16":
+    if args.quantize:
         """
         Start evaluating Quantized Models from here
         """
@@ -77,11 +76,11 @@ def main(args):
     if args.log_dir:
         logs['args'] = vars(args)
         os.makedirs(args.log_dir, exist_ok=True)
-        if args.quant_type.lower() == "fp16":
-            log_paths = os.path.join(args.log_dir, f"{model_name}_fp16.json")
+        if args.quantize:
+            log_name = f"{model_name}" if is_quamba else f"{model_name}_w{args.w_bits}a{args.a_bits}"
+            log_paths = os.path.join(args.log_dir, f"{log_name}.json")
         else:
-            log_paths = os.path.join(args.log_dir,
-                                     f"{model_name}_{os.path.splitext(args.q_configs.split('/')[-1])[0]}_{args.quant_type}.json")
+            log_paths = os.path.join(args.log_dir, f"{model_name}_fp16.json")
         with open(log_paths, 'a') as fp:
             logging.info(f"Saving result to {log_paths}")
             json.dump(logs, fp, indent=4)
