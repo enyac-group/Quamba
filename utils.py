@@ -77,10 +77,6 @@ def get_quantize_options(parser):
     )
     # quantization parameters
     parser.add_argument(
-        '--do_reordering',  action='store_true', default=False,
-        help='Whether to do the reordering (default: False)'
-    )
-    parser.add_argument(
         '--group_heads',  action='store_true', default=False,
         help='Whether to group heads during the reordering (default: False)'
     )

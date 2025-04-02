@@ -800,10 +800,9 @@ def quantize_model_mamba(model, model_type, tokenizer, device, args, calibration
     logging.info(f"Target bit-width W{args.w_bits}A{args.a_bits}")
     if args.a_bits == 8:
         # Run calibration to get scale and reorder params
-        if args.do_reordering:
-            logging.info(f"Reordering weights and activations, group_heads: {args.group_heads}")
-            reorder_params = get_reorder_params(
-                model, model_type, tokenizer, num_samples=512, seq_len=512, group_heads=args.group_heads)
+        if args.group_heads:
+            logging.info(f"Reordering weights and activations for head grouping")
+            reorder_params = get_reorder_params(model, model_type, tokenizer, num_samples=512, seq_len=512)
             reorder_mamba(model, reorder_params)
             # collect 8-bit activation scales
             act_scales = run_quamba2_calibration(model, model_type, tokenizer, reorder_params,
@@ -821,7 +820,7 @@ def quantize_model_mamba(model, model_type, tokenizer, device, args, calibration
     elif args.a_bits == 16:
         # not doing anything for activations
         act_scales = {}
-        if args.do_reordering or args.group_heads:
+        if args.group_heads:
             logging.info(f"Activation bit-width is set to 16, skip weights reordering and head grouping")
     else:
         raise ValueError(f"Unsupported activation bit-width: {args.a_bits}, try --a_bits 8 or --a_bits 16?")

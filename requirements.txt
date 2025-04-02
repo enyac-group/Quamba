@@ -1,5 +1,6 @@
 torch==2.4.0
 transformers==4.41.2
+peft==0.10.0
 # triton==3.0.0 # should build from source, commit 07671fd686c613dba47b771e8bcc7047c14d9483
 huggingface_hub==0.27.0 # specified the version to avoid datasets api mismatch with huggingface hub
 datasets==2.19.0

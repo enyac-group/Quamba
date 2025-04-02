@@ -8,7 +8,7 @@ import logging
 import sys
 import os
 # import this will use lm_eval logging format (see lm_eval/logger.py and lm_eval/__main__.py)
-from eval_utils import eval_mamba_few_shot, eval_mamba_generation, evaluate_ppl
+from quamba.eval_utils import eval_mamba_few_shot, eval_mamba_generation, evaluate_ppl
 from quamba.modelutils_mamba import quantize_model_mamba
 
 def main(args):    
