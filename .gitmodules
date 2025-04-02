@@ -10,3 +10,6 @@
 [submodule "3rdparty/mamba"]
 	path = 3rdparty/mamba
 	url = git@github.com:enyac-group/mamba.git
+[submodule "3rdparty/Megatron-LM"]
+	path = 3rdparty/Megatron-LM
+	url = https://github.com/NVIDIA/Megatron-LM.git
