@@ -167,6 +167,91 @@ python profile_mamba.py state-spaces/mamba-2.8b  --act_scales_cache mamba-2.8b_s
 ```
 
 
+# Mamba2-8B
+
+Download the checkpoint using `huggingface-cli`
+```
+huggingface-cli download nvidia/mamba2-8b-3t-4k --local-dir ./pretrained_models/mamba2-8b-3t-4k
+```
+After downloading, you will have the directory `./pretrained_models/mamba2-8b-3t-4k` having a structure like this
+```
+├── latest_checkpointed_iteration.txt
+├── mt_nlg_plus_multilingual_ja_zh_the_stack_frac_015_256k.model (This is tokenizer)
+├── README.md
+└── release
+    └── mp_rank_00
+        └── model_optim_rng.pt (This is weights)
+```
++ Run the conversion scripts to get the model directory
+```
+python convert_mamba2_8b_to_hf.py \
+./pretrained_models/mamba2-8b-3t-4k/release/mp_rank_00/model_optim_rng.pt \
+./pretrained_models/mamba2-8b-3t-4k/mt_nlg_plus_multilingual_ja_zh_the_stack_frac_015_256k.model \
+--model_save_path ./pretrained_models/mamba2-8b-converted
+```
+
+After running, you will see a directory called `mamba2-8b-converted` has been created. Then you can run it with evaluation, profiling as the instructions above. However, it requires at least *24GB* memory on the GPU to quantize the Mamba2-8B model.
+
+For example:
+```
+python main.py pretrained_models/mamba2-8b-converted real \
+--batch_size 16 \
+--eval_zero_shot \
+--task_list lambada_openai \
+--q_configs ./configs/mamba2/w4a8/quamba_in_hsort_gptq.json \
+--do_reordering \
+--group_heads \
+--apply_gptq \
+--quantize_embedding \
+--quantize_lm_head \
+--w_bits 4 \
+--a_bits 8
+``` 
+
+Calibrating scaling factors and applying GPTQ can take lots of time, and quantizing models consumes more memory than running the quantized models. 
+
+To avoid re-calculating scaling factors and GPTQ, use `--pretrained_dir ./pretrained_models` to store the quantized model. The checkpoint under `--pretrained_dir ./pretrained_models/ut-enyac/mamba2-8b-converted-w4a8`. 
+
+For example:
+
+```
+python main.py pretrained_models/mamba2-8b-converted real \
+--batch_size 16 \
+--eval_zero_shot \
+--task_list lambada_openai \
+--q_configs ./configs/mamba2/w4a8/quamba_in_hsort_gptq.json \
+--do_reordering \
+--group_heads \
+--apply_gptq \
+--quantize_embedding \
+--quantize_lm_head \
+--w_bits 4 \
+--a_bits 8 \
+--pretrained_dir ./pretrained_models \
+--log_dir logs
+```
+
+To run with the stored quantized model:
+
+```
+python main.py pretrained_models/mamba2-8b-converted real \
+--batch_size 16 \
+--eval_zero_shot \
+--task_list lambada_openai \
+--q_configs ./configs/mamba2/w4a8/quamba_in_hsort_gptq.json \
+--w_bits 4 \
+--a_bits 8 \
+--pretrained_dir ./pretrained_models \
+--log_dir logs
+# or
+python main.py ut-enyac/quamba2-8b-converted-w4a8 real \
+--batch_size 16 \
+--eval_zero_shot \
+--task_list lambada_openai \
+--q_configs ./configs/mamba2/w4a8/quamba_in_hsort_gptq.json \
+--pretrained_dir ./pretrained_models \
+--log_dir logs
+```
 
 # Citation
 ```
