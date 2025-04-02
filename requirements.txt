@@ -1,5 +1,11 @@
-torch==2.1.2
-transformers==4.40.1
-triton==2.1.0
+torch==2.4.0
+transformers==4.41.2
+# triton==3.0.0 # should build from source, commit 07671fd686c613dba47b771e8bcc7047c14d9483
+huggingface_hub==0.27.0 # specified the version to avoid datasets api mismatch with huggingface hub
 datasets==2.19.0
-numpy==1.25.2 # degrade the version for transformers
+numpy==1.26.4 # degrade the version for transformers
+# megatron-core==0.10.0 # for mamba2-8b, we use our commit under 3rdparty/Megatron-LM
+sentencepiece==0.2.0 # for mamba2-8b tokenizer
+protobuf==4.25.2 # for mamba2-8b tokenizer google protobuf
+scikit-learn==1.4.0 # for quamba2 head grouping
+HolisticTraceAnalysis==0.2.0 # for profile_mamba.py
