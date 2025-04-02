@@ -85,15 +85,20 @@ def evaluate_ppl(
 
 
 # Function to evaluate perplexity (ppl)
-def my_eval_ppl(model, testenc, bs=1, device=None):
-    model.seqlen = 2048
+@torch.no_grad()
+def my_eval_ppl(model, testenc, bs=1, device=None, seq_len=2048, quick_eval_nsamples=-1):
+    model.seqlen = seq_len
     
     # Get input IDs
     testenc = testenc.input_ids
 
     # Calculate number of samples
-    nsamples = testenc.numel() // model.seqlen
-
+    total_nsamples = testenc.numel() // model.seqlen
+    if quick_eval_nsamples == -1:
+        nsamples = total_nsamples
+    else:
+        nsamples = min(quick_eval_nsamples, total_nsamples)
+    
     # List to store negative log likelihoods
     nlls = []
     loss_lst = []

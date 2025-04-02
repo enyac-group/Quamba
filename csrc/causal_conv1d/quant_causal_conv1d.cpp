@@ -18,6 +18,9 @@ template<typename input_t, typename weight_t>
 void quant_causal_conv1d_fwd_cuda(QuantConvParamsBase &params, cudaStream_t stream);
 
 template<typename input_t, typename weight_t>
+void quant_causal_conv1d_channellast_fwd_cuda(QuantConvParamsBase &params, cudaStream_t stream);
+
+template<typename input_t, typename weight_t>
 void quant_causal_conv1d_update_cuda(QuantConvParamsBase &params, cudaStream_t stream);
 
 
@@ -102,7 +105,8 @@ quant_causal_conv1d_fwd(
     const bool is_channel_last = x.stride(1) == 1 && x.stride(2) > 1;
 
     if (is_channel_last) {
-        throw std::logic_error("No implementation for channel last");
+        TORCH_CHECK(dim % 8 == 0, "causal_conv1d only supports channel dimension divisible by 8 for now");
+        TORCH_CHECK(x.stride(2) % 8 == 0 and x.stride(0) % 8 == 0, "causal_conv1d with channel last layout requires strides (x.stride(0) and x.stride(2)) to be multiples of 8");
     }
     TORCH_CHECK(width >= 2 && width <= 4, "causal_conv1d only supports width between 2 and 4");
 
@@ -126,19 +130,19 @@ quant_causal_conv1d_fwd(
                         silu_activation);
 
     if (seq_idx_.has_value()) {
-        params.seq_idx_ptr = seq_idx_.value().data_ptr();
+        throw std::logic_error("No implementation for seq_idx");
     } else {
         params.seq_idx_ptr = nullptr;
     }
 
     if (initial_states_.has_value()) {
-        throw std::logic_error("No implementation for channel last");
+        throw std::logic_error("No implementation for initial_states");
     } else {
         params.initial_states_ptr = nullptr;
     }
 
     if (final_states_out_.has_value()) {
-        throw std::logic_error("No implementation for channel last");
+        throw std::logic_error("No implementation for final_states_out");
     } else {
         params.final_states_ptr = nullptr;
     }
@@ -152,7 +156,7 @@ quant_causal_conv1d_fwd(
             if (!is_channel_last) {
                 quant_causal_conv1d_fwd_cuda<input_t, weight_t>(params, stream);
             } else {
-                throw std::logic_error("No implementation for channel last");
+                quant_causal_conv1d_channellast_fwd_cuda<input_t, weight_t>(params, stream);
             }
         });
     });

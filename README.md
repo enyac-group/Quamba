@@ -1,17 +1,22 @@
-# Quamba: A Post-Training Quantization Recipe for Selective State Space Models
+# Quamba
 
 [Hung-Yueh Chiang](https://hychiang.info/),
-[Chi-Chih Chang](https://github.com/shadowpa0327),
+[Chi-Chih Chang](https://ccchang.info/),
 [Natalia Frumkin](https://www.nfrumkin.com),
+
 [Kai-Chiang Wu](https://people.cs.nycu.edu.tw/~kcw/),
+[Mohamed S. Abdelfattah](https://www.mohsaied.com/),
 [Diana Marculescu](https://users.ece.utexas.edu/~dianam/)
 
-[![arXiv](https://img.shields.io/badge/arXiv-2410.13229-b31b1b.svg)](https://arxiv.org/pdf/2410.13229)
-[![Project Page](https://img.shields.io/badge/Project-Website-orange)](https://hychiang.info/projects/quamba/)
+[![Quamba2 arXiv](https://img.shields.io/badge/Quamba2-arXiv-b31b1b.svg)](https://arxiv.org/pdf/2503.22879)
+[![Quamba2 Page](https://img.shields.io/badge/Quamba2-Website-orange)](https://hychiang.info/projects/quamba2/)
 
 
-⚡8-bit quantization (W8A8) for mamba blocks 🚀1.7 $\times$ speedup on Orin Nano 8G 🔻 2 $\times$ memory reduction
-![Quamba](misc/Quamba.png)
+- 🔧 Supports W4A8 / W4A16 / W4AX / W8A8 for Mamba1 and Mamba2
+- 🔻 4× memory reduction
+- 🚀 Achieves 13 tokens per second on Orin Nano 8G with Mamba2-8B
+
+![Quamba](misc/Quamba2.jpg)
 
 
 ## Real-time Generation on a NVIDIA Orin Nano 8G
@@ -30,6 +35,9 @@
 - Clone the repository with all submodules:
 ```
 git clone --recurse-submodules git@github.com:enyac-group/Quamba.git
+# or
+cd Quamba
+git submodule update --init --recursive
 ```
 
 - Run in docker (optional)
@@ -82,6 +90,13 @@ pip install 3rdparty/mamba
 bash build_cutlass.sh
 ```
 
+- Install Megatron-LM
+```
+pip install -e 3rdparty/Megatron-LM
+# Not sure why Megatron-LM will force to install pytorch 2.6.0+cu124
+# , so run `pip install -r requirements.txt` again if necessary
+```
+
 ### Build Quamba
 ```
 pip install .
@@ -91,26 +106,43 @@ pip install .
 
 To generate the sentence from Mamba (FP16) given an input prompt:
 ```
-python generate.py state-spaces/mamba-130m --prompt "My cat wrote all this CUDA code for a new language model and" --topp 0.9 --temperature 0.7 --repetition_penalty 1.2
+python generate.py state-spaces/mamba2-130m --prompt "My cat wrote all this CUDA code for a new language model and" --topp 0.9 --temperature 0.7 --repetition_penalty 1.2
 ```
 
-To generate the sentence from Qamba (Int8) given an input prompt:
+To generate the sentence from Quamba (Int8) given an input prompt:
 ```
-python generate.py state-spaces/mamba-130m --prompt "My cat wrote all this CUDA code for a new language model and" --topp 0.9 --temperature 0.7 --repetition_penalty 1.2 --quantize --act_scales_cache mamba-130m_scales.pt
-```
-
-
-## Chat
-
-To chat with Mamba (FP16), use the command:
-```
-python chat.py  --cache_graph
+python generate.py state-spaces/mamba2-130m --prompt "My cat wrote all this CUDA code for a new language model and" --topp 0.9 --temperature 0.7 --repetition_penalty 1.2 --quantize --cache_graph
 ```
 
-To chat with Quamba (Int8), use the command:
+##  Quantization Evaluation
+To evaluate the end-to-end quantization:
 ```
-python chat.py  --cache_graph --act_scales_cache mamba-2.8b_scales_chat.pt  --quantize
+python main.py state-spaces/mamba-130m real \
+--act_scales_cache mamba-130m_scales.pt \
+--batch_size 1 \
+--task_list lambada_openai \
+--eval_zero_shot \
+--log_dir logs
 ```
+
+# Chat
+
+To chat with the fp16 model, use the command:
+```
+# FP16
+python chat.py --cache_graph
+```
+
+To chat with the int8 model, use the command:
+```
+# W8A8 (default)
+python chat.py --cache_graph --quantize --quantize_embedding --quantize_lm_head
+# W4A8
+python chat.py --cache_graph --quantize --w_bits 4 --a_bits 8 --apply_gptq --quantize_embedding --quantize_lm_head
+# W4A16
+python chat.py --cache_graph --quantize --w_bits 4 --a_bits 16 --apply_gptq --quantize_embedding --quantize_lm_head
+```
+
 
 ## Profile latency and memory
 
@@ -134,31 +166,16 @@ python profile_mamba.py state-spaces/mamba-2.8b  --act_scales_cache mamba-2.8b_s
 python profile_mamba.py state-spaces/mamba-2.8b  --act_scales_cache mamba-2.8b_scales.pt --prompt_len 512 --gen_len 512 --size
 ```
 
-## Fake Quantization Evaluation
-To evaluate the simulated quantization:
-```
-python main.py state-spaces/mamba-130m fake \
---do_hadamard \
---do_percentile_u \
---batch_size 16 \
---task_list lambada_openai \
---eval_zero_shot \
---log_dir logs
-```
 
-## Real Quantization Evaluation
-To evaluate the end-to-end quantization:
-```
-python main.py state-spaces/mamba-130m real \
---act_scales_cache mamba-130m_scales.pt \
---batch_size 1 \
---task_list lambada_openai \
---eval_zero_shot \
---log_dir logs
-```
 
 # Citation
 ```
+@article{chiang2025quamba2,
+  title={Quamba2: A Robust and Scalable Post-training Quantization Framework for Selective State Space Models},
+  author={Chiang, Hung-Yueh and Chang, Chi-Chih and Frumkin, Natalia and Wu, Kai-Chiang, Abdelfattah, Mohamed S.  and Marculescu, Diana},
+  journal={arXiv preprint arXiv:2503.22879},
+  year={2025}
+}
 @article{chiang2024quamba,
   title={Quamba: A Post-Training Quantization Recipe for Selective State Space Models},
   author={Chiang, Hung-Yueh and Chang, Chi-Chih and Frumkin, Natalia and Wu, Kai-Chiang and Marculescu, Diana},

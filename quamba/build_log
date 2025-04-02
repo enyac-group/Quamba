@@ -1,0 +1,31 @@
+2025-04-02T20:50:00,603 Using pip 25.0 from /home/hc29225/anaconda3/envs/quamba/lib/python3.10/site-packages/pip (python 3.10)
+2025-04-02T20:50:00,604 Non-user install because site-packages writeable
+2025-04-02T20:50:00,749 Created temporary directory: /tmp/pip-build-tracker-2apvmraw
+2025-04-02T20:50:00,749 Initialized build tracking at /tmp/pip-build-tracker-2apvmraw
+2025-04-02T20:50:00,749 Created build tracker: /tmp/pip-build-tracker-2apvmraw
+2025-04-02T20:50:00,749 Entered build tracker: /tmp/pip-build-tracker-2apvmraw
+2025-04-02T20:50:00,749 Created temporary directory: /tmp/pip-install-x2krmn2q
+2025-04-02T20:50:00,769 Remote version of pip: 25.0.1
+2025-04-02T20:50:00,769 Local version of pip:  25.0
+2025-04-02T20:50:00,770 Was pip installed by pip? False
+2025-04-02T20:50:00,770 ERROR: Directory '.' is not installable. Neither 'setup.py' nor 'pyproject.toml' found.
+2025-04-02T20:50:00,771 Exception information:
+2025-04-02T20:50:00,771 Traceback (most recent call last):
+2025-04-02T20:50:00,771   File "/home/hc29225/anaconda3/envs/quamba/lib/python3.10/site-packages/pip/_internal/cli/base_command.py", line 106, in _run_wrapper
+2025-04-02T20:50:00,771     status = _inner_run()
+2025-04-02T20:50:00,771   File "/home/hc29225/anaconda3/envs/quamba/lib/python3.10/site-packages/pip/_internal/cli/base_command.py", line 97, in _inner_run
+2025-04-02T20:50:00,771     return self.run(options, args)
+2025-04-02T20:50:00,771   File "/home/hc29225/anaconda3/envs/quamba/lib/python3.10/site-packages/pip/_internal/cli/req_command.py", line 67, in wrapper
+2025-04-02T20:50:00,771     return func(self, options, args)
+2025-04-02T20:50:00,771   File "/home/hc29225/anaconda3/envs/quamba/lib/python3.10/site-packages/pip/_internal/commands/install.py", line 350, in run
+2025-04-02T20:50:00,771     reqs = self.get_requirements(args, options, finder, session)
+2025-04-02T20:50:00,771   File "/home/hc29225/anaconda3/envs/quamba/lib/python3.10/site-packages/pip/_internal/cli/req_command.py", line 233, in get_requirements
+2025-04-02T20:50:00,771     req_to_add = install_req_from_line(
+2025-04-02T20:50:00,771   File "/home/hc29225/anaconda3/envs/quamba/lib/python3.10/site-packages/pip/_internal/req/constructors.py", line 405, in install_req_from_line
+2025-04-02T20:50:00,771     parts = parse_req_from_line(name, line_source)
+2025-04-02T20:50:00,771   File "/home/hc29225/anaconda3/envs/quamba/lib/python3.10/site-packages/pip/_internal/req/constructors.py", line 331, in parse_req_from_line
+2025-04-02T20:50:00,771     url = _get_url_from_path(p, name)
+2025-04-02T20:50:00,771   File "/home/hc29225/anaconda3/envs/quamba/lib/python3.10/site-packages/pip/_internal/req/constructors.py", line 287, in _get_url_from_path
+2025-04-02T20:50:00,771     raise InstallationError(
+2025-04-02T20:50:00,771 pip._internal.exceptions.InstallationError: Directory '.' is not installable. Neither 'setup.py' nor 'pyproject.toml' found.
+2025-04-02T20:50:00,772 Removed build tracker: '/tmp/pip-build-tracker-2apvmraw'

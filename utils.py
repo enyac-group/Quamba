@@ -1,6 +1,9 @@
-import argparse
+import os
+import json
 import random
+import argparse
 import numpy as np
+
 import torch
 from transformers import (
     AutoModelForCausalLM,
@@ -8,34 +11,40 @@ from transformers import (
     BitsAndBytesConfig
 )
 from mamba_ssm.models.mixer_seq_simple import MambaLMHeadModel
+from quamba.megatron_utils import _GPTSentencePieceTokenizer
+from quamba.quamba_mixer_seq import QuambaLMHeadModel
+
 
 def build_mamba_and_tokenizer(args, model_type="mamba"):
+    is_quamba = False
     device = "cuda"
     dtype = torch.float16 # use half, otherwise real quant won't run
-    if model_type == "jamba":
-        tokenizer = AutoTokenizer.from_pretrained(args.model)
-        if args.eval_fp16:
-            model = AutoModelForCausalLM.from_pretrained(args.model,
-                                            trust_remote_code=True,
-                                            torch_dtype=torch.bfloat16,
-                                            attn_implementation="flash_attention_2", # pip install flash-attn --no-build-isolation
-                                            device_map="auto")
+    if model_type == "mamba" or model_type == "mamba2":
+        if "mamba2-8b" not in args.model:
+            tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-neox-20b", resume_download=None)
         else:
-            # BitsAndBytes is slower than fp16
-            quantization_config = BitsAndBytesConfig(load_in_8bit=True,
-                                            llm_int8_skip_modules=args.skip_modules)
-            model = AutoModelForCausalLM.from_pretrained(args.model,
-                                            trust_remote_code=True,
-                                            torch_dtype=torch.bfloat16,
-                                            device_map="auto",
-                                            # llm_int8_enable_fp32_cpu_offload=True,
-                                            quantization_config=quantization_config)
-    elif model_type == "mamba":
-        tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-neox-20b", resume_download=None)
+            # NOTE(hychiang): Special handle for mamba2-8b's tokenizer from NVIDIA Megatron
+            # FIXME: hardcode the tokenizer file name for now
+            tokenizer_ckpt = os.path.join(args.model, "mt_nlg_plus_multilingual_ja_zh_the_stack_frac_015_256k.model")
+            tokenizer = _GPTSentencePieceTokenizer(tokenizer_ckpt)
         model = MambaLMHeadModel.from_pretrained(args.model, device=device, dtype=dtype)
+    elif model_type == "quamba" or model_type == "quamba2":
+        assert args.quant_type == "real", "Only support real quantization for quamba"
+        assert args.pretrained_dir, "Please specify the --pretrained_dir for quamba models"
+        quantized_model_path = os.path.join(args.pretrained_dir, args.model)
+        assert os.path.exists(quantized_model_path), f"Quantized model {quantized_model_path} not found"
+        if "quamba2-8b" not in args.model:
+            tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-neox-20b", resume_download=None)
+        else:
+            # NOTE(hychiang): Special handle for mamba2-8b's tokenizer from NVIDIA Megatron
+            # FIXME: the model and tokenizer will be initizlied again in modelutils_mamba.py
+            tokenizer_ckpt = os.path.join(args.pretrained_dir, args.model, "mt_nlg_plus_multilingual_ja_zh_the_stack_frac_015_256k.model")
+            tokenizer = _GPTSentencePieceTokenizer(tokenizer_ckpt)
+        model = QuambaLMHeadModel.from_pretrained(quantized_model_path, device="cuda")
+        is_quamba = True
     else:
-        raise ValueError(f"Unsupported model type: {model_type}, only support 'mamba' and 'jamba'")
-    return model, tokenizer
+        raise ValueError(f"Unsupported model type: {model_type}, only support 'mamba', 'mamba2', 'quamba' and 'quamba2'")
+    return model, tokenizer, is_quamba
 
 
 
@@ -47,40 +56,35 @@ def set_deterministic(seed):
     random.seed(seed)
     np.random.seed(seed)
     
-def parse_options():
+def parse_options(require_quant_type=True):
     parser = argparse.ArgumentParser()
     parser.add_argument(
         'model', type=str,
         help='Mamba to load; pass location of hugginface converted checkpoint.'
     )
+    if require_quant_type:
+        parser.add_argument(
+            'quant_type', choices=["fp16", "w4a8", "w4a16", "w4aX", "w8a8"],
+            help='Execution mode (Options: real, fake, fp16, search)'
+        )
     parser.add_argument(
-        'quant_type', choices=['real', 'fake'],
-        help='Real quant for fake quant (Options: real, fake)'
+        '--verbose', action='store_true',
+        help='Whether to print the debug level information'
     )
+    ##### Load/store model and act_scales_cache #####
     parser.add_argument(
-        '--do_calibrate', action='store_true', default=False,
-        help='Whether to calibrate the model'
+        '--pretrained_dir', type=str, default=None,
+        help='The path to store both the quantized model and its act_scales_cache.'
+        'Not storing if not provided. (default: None)'
     )
+    ##### General Evaluation Settings #####
     parser.add_argument(
         '--calib_data_num', type=int, default=512,
         help='Number of calibration data'
     )
     parser.add_argument(
-        '--act_scales_cache', type=str, 
-        help='The pre-calibrated activaction scaling factors for static quant.'
-            'Performing daynamic quant if not provided. (default: None)'
-    )
-    parser.add_argument(
-        '--do_smoothing', action='store_true', default=False,
-        help='Whether to smooth the model (smoothQuant)'
-    )
-    parser.add_argument(
-        '--do_hadamard', action='store_true', default=False,
-        help='Whether to apply hadamard transform (hadQuant)'
-    )
-    parser.add_argument(
-        '--do_percentile_u', action='store_true', default=False,
-        help='Whether to use percentile_u for calibrating SSMs inputs'
+        '--calib_seqlen', type=int, default=512,
+        help='Number of calibration data'
     )
     parser.add_argument(
         '--batch_size', type=int, default=1,
@@ -91,12 +95,20 @@ def parse_options():
         help='Task to be evaled, e.g., --task_list lambada_openai,hellaswag,arc_easy,arc_challenge,piqa,winogrande'
     )
     parser.add_argument(
-        '--skip_modules', type=lambda s: [item for item in s.split(',')], default=["mamba"],
-        help='llm.int8 modules to skip. Make sure to skip self_attn if you are quantizing it with our setup!'
+        '--eval_zero_shot', action='store_true', default=False,
+        help='Whether to evaluate the zero-shot performance Task(s) specified by `--tasks_list`, e.g, --tasks_list lambada_openai,hellaswag,arc_easy,arc_challenge,piqa,winogrande'
+    )
+    parser.add_argument(
+        '--eval_few_shot', action='store_true', default=False,
+        help='Whether to evaluate the few-shot performance. Task(s) specified by `--tasks_list` and `--fewshot`'
     )
     parser.add_argument(
         '--fewshot', type=int, default=0,
         help='Number of shots for few-shot evaluation (0 for zero-shot)'
+    )
+    parser.add_argument(
+        '--eval_generation', action='store_true', default=False,
+        help='Whether to evaluate the performance of the generation tasks. Task(s) specified by `--tasks_list`, e.g, --tasks_list nq_open,squadv2'
     )
     parser.add_argument(
         '--eval_fp16', action='store_true',
@@ -107,14 +119,6 @@ def parse_options():
         help='testing with decreased sample count'
     )
     parser.add_argument(
-        '--log_dir', type=str,
-        help='path to the json log file storing the result of lm_evan and quantization settingarg'
-    )
-    parser.add_argument(
-        '--verbose', action='store_true',
-        help='Whether to print the debug level information'
-    )
-    parser.add_argument(
         '--eval_ppl', action='store_true', default=False,
         help='Whether to evaluate the wikitext2 ppl'
     )
@@ -123,8 +127,44 @@ def parse_options():
         help='Dataset for ppl evaluation'
     )
     parser.add_argument(
-        '--eval_zero_shot', action='store_true', default=False,
-        help='Whether to evaluate the zero-shot performance'
+        '--log_dir', type=str,
+        help='path to the json log file storing the result of lm_evan and quantization settingarg'
+    )
+    parser.add_argument(
+        '--do_reordering',  action='store_true', default=False,
+        help='Whether to do the reordering (default: False)'
+    )
+    parser.add_argument(
+        '--group_heads',  action='store_true', default=False,
+        help='Whether to group heads during the reordering (default: False)'
+    )
+    parser.add_argument(
+        "--quantize_embedding", action='store_true', default=False,
+        help="Whether to quantize the embedding layer (default: False)"
+    )
+    parser.add_argument(
+        "--quantize_lm_head", action='store_true', default=False,
+        help="Whether to quantize the lm_head layer (default: False)"
+    )
+    parser.add_argument(
+        '--apply_gptq',  action='store_true', default=False,
+        help='Whether to apply the GPTQ quantizer (default: False)'
+    )
+    parser.add_argument(
+        '--w_bits', type=int, default=8,
+        help='The bit-width for weights applied in the real quantization (defualt: 4)'
+    )
+    parser.add_argument(
+        '--a_bits', type=int, default=8,
+        help='The bit-width for activations applied in the real quantization (defualt: 8)'
+    )
+    parser.add_argument(
+        '--hybrid_blocks', action='store_true', default=False,
+        help='Whether to create hybrid blocks for configuring act_bits of blocks in a dynamic fashion.'
+    )
+    parser.add_argument(
+        '--hybrid_blocks_config', type=str, default=None,
+        help='Path to the the configuration for hybrid blocks'
     )
     args = parser.parse_args()
     return args

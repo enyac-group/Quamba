@@ -85,16 +85,11 @@ void quant_sscan_fwd_kernel(QuantSSMParams params) {
     // Shared memory.
     extern __shared__ char smem_[];
     // cast to lvalue reference of expected type
-    // char *smem_loadstorescan = smem_ + 2 * MAX_DSTATE * sizeof(weight_t);
-    // auto& smem_load = reinterpret_cast<typename BlockLoadT::TempStorage&>(smem_ + 2 * MAX_DSTATE * sizeof(weight_t));
-    // auto& smem_load = reinterpret_cast<typename BlockLoadT::TempStorage&>(smem_loadstorescan);
     auto& smem_load = reinterpret_cast<typename Ktraits::BlockLoadT::TempStorage&>(smem_);
     auto& smem_load_weight = reinterpret_cast<typename Ktraits::BlockLoadWeightT::TempStorage&>(smem_);
     auto& smem_load_weight1 = *reinterpret_cast<typename Ktraits::BlockLoadWeightT::TempStorage*>(smem_ + sizeof(typename Ktraits::BlockLoadWeightT::TempStorage));
     auto& smem_store = reinterpret_cast<typename Ktraits::BlockStoreT::TempStorage&>(smem_);
     auto& smem_scan = *reinterpret_cast<typename Ktraits::BlockScanT::TempStorage*>(smem_ + Ktraits::kSmemIOSize);
-    // weight_t *smem_a = reinterpret_cast<weight_t *>(smem_ + smem_loadstorescan_size);
-    // weight_t *smem_bc = reinterpret_cast<weight_t *>(smem_a + MAX_DSTATE);
     scan_t *smem_running_prefix = reinterpret_cast<scan_t *>(smem_ + Ktraits::kSmemSize);
 
     const int batch_id = blockIdx.x;
@@ -109,7 +104,8 @@ void quant_sscan_fwd_kernel(QuantSSMParams params) {
     input_t *Bvar = reinterpret_cast<input_t *>(params.B_ptr) + batch_id * params.B_batch_stride + group_id * params.B_group_stride;
     weight_t *C = reinterpret_cast<weight_t *>(params.C_ptr) + dim_id * kNRows * params.C_d_stride;
     input_t *Cvar = reinterpret_cast<input_t *>(params.C_ptr) + batch_id * params.C_batch_stride + group_id * params.C_group_stride;
-    scan_t *x = reinterpret_cast<scan_t *>(params.x_ptr) + (batch_id * params.dim + dim_id * kNRows) * params.n_chunks * params.dstate;
+    // int8 ssm_state
+    input_t *x = reinterpret_cast<input_t *>(params.x_ptr) + (batch_id * params.dim + dim_id * kNRows) * params.n_chunks * params.dstate;
 
     float D_val[kNRows] = {0};
     // load quantization scaling factors
@@ -133,11 +129,11 @@ void quant_sscan_fwd_kernel(QuantSSMParams params) {
 
     constexpr int kChunkSize = kNThreads * kNItems;
     const float scale_delta = *reinterpret_cast<float *>(params.scale_delta_ptr); // scale_delta: (1)
+    const float scale_ssm_state = *reinterpret_cast<float *>(params.scale_ssm_state_ptr); // scale_ssm_state: (1)
     const float scale_u = *reinterpret_cast<float *>(params.scale_u_ptr); // scale_u: (1)
     const float scale_A = *reinterpret_cast<float *>(params.scale_A_ptr); // scale_A: (1)
     const float scale_B = *reinterpret_cast<float *>(params.scale_B_ptr); // scale_B: (1)
     const float scale_C = *reinterpret_cast<float *>(params.scale_C_ptr); // scale_C: (1)
-    const float scale_out = *reinterpret_cast<float *>(params.scale_out_ptr); // scale_out: (1)
     for (int chunk = 0; chunk < params.n_chunks; ++chunk) {
         input_t u_vals_load[kNRows][kNItems], delta_vals_load[kNRows][kNItems];
         __syncthreads();
@@ -240,7 +236,9 @@ void quant_sscan_fwd_kernel(QuantSSMParams params) {
                 // Unless there's only 1 warp, but then it's the same thread (0) reading and writing.
                 if (threadIdx.x == 0) {
                     smem_running_prefix[state_idx] = prefix_op.running_prefix;
-                    x[(r * params.n_chunks + chunk) * params.dstate + state_idx] = prefix_op.running_prefix;
+                    // We only store the final output (y part) as the ssm state
+                    int ssm_state = int(roundf(prefix_op.running_prefix.y / scale_ssm_state));
+                    x[(r * params.n_chunks + chunk) * params.dstate + state_idx] = ssm_state > 127 ? 127 : ssm_state < -128 ? -128 : static_cast<input_t>(ssm_state);
                 }
                 #pragma unroll
                 for (int i = 0; i < kNItems; ++i) {

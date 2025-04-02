@@ -1,131 +1,118 @@
+import os
 import sys
+import time
+import gzip
+import json
+import socket
 import logging
+import argparse
+import numpy as np
+from datetime import datetime
 from functools import partial
 
 import torch
-from transformers import AutoTokenizer
-
-# mamba
-from mamba_ssm.models.mixer_seq_simple import MambaLMHeadModel
-from mamba_ssm.models.config_mamba import MambaConfig
-from mamba_ssm.utils.generation import InferenceParams
-
-from utils import set_deterministic
-from quamba.real_quant.modelutils_mamba import quantize_blocks, run_calibration
-
-import argparse
-import os
-
-import socket
-from datetime import datetime
 from torch.autograd.profiler import record_function
+from transformers.models.opt.modeling_opt import OPTAttention, OPTDecoderLayer, OPTForCausalLM
+from transformers import GPT2Tokenizer
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+)
+from hta.trace_analysis import TraceAnalysis
+# mamba
+from mamba_ssm.modules.block import Block
+from mamba_ssm.modules.mamba2 import Mamba2
+from mamba_ssm.modules.mamba_simple import Mamba
+from mamba_ssm.utils.generation import InferenceParams
+from mamba_ssm.models.mixer_seq_simple import MambaLMHeadModel
+
+from megatron_utils import _GPTSentencePieceTokenizer
+from utils import set_deterministic
+from quamba.quamba_mixer_seq import QuambaLMHeadModel
+from quamba.modelutils_mamba import quantize_model_mamba
+from quamba.qMambaLayer import W4A8QMamba, W4A16QMamba, W8A8QMamba
+from quamba.qMamba2 import W4A8QMamba2, W4A16QMamba2, W8A8QMamba2
 
 TIME_FORMAT_STR: str = "%b_%d_%H_%M_%S"
 
-def trace_handler(prof: torch.profiler.profile, file_postfix="prefilling", device="cuda:0"):
-   # Prefix for file names.
-   host_name = socket.gethostname()
-   timestamp = datetime.now().strftime(TIME_FORMAT_STR)
-   file_prefix = f"{host_name}_{timestamp}"
-
-   # Construct the trace file.
-   prof.export_chrome_trace(f"{file_prefix}_{file_postfix}.json.gz")
-
-   # Construct the memory timeline file.
-   # !!! This does not work for graph cache !!!
-   prof.export_memory_timeline(f"{file_prefix}_{file_postfix}.html", device=device)
-
-def build_mamba(args):
-    device = "cuda:0"
-    dtype = torch.float16
-
-    model_name = args.model.lower().split('/')[-1]
-    assert model_name != None, "Please check the model path."
-    logging.info(f"Creating Model:{model_name}, dtype: {dtype}, device: {device}")
-    rms_norm = True
-    fused_add_norm = True
-    if args.disable_triton:
-        rms_norm = False
-        fused_add_norm = False
-    if model_name == "mamba-2.8b":
-        """mamba-2.8b config"""
-        d_state = 16 # default
-        cfg = MambaConfig(
-            d_model=2560,
-            n_layer=64,
-            vocab_size=50277,
-            ssm_cfg={},
-            rms_norm=rms_norm,
-            residual_in_fp32=True,
-            fused_add_norm=fused_add_norm, # 72.98 ms
-            pad_vocab_size_multiple=8
-        )
-    elif model_name == "mamba-1.4b":
-        """mamba-1.4b config"""
-        cfg = MambaConfig(
-            d_model=2048,
-            n_layer=48,
-            vocab_size=50277,
-            ssm_cfg={},
-            rms_norm=rms_norm,
-            residual_in_fp32=True,
-            fused_add_norm=fused_add_norm,
-            pad_vocab_size_multiple=8
-        )
-    elif model_name == "mamba-790m":
-        cfg = MambaConfig(
-            d_model=1536,
-            n_layer=48,
-            vocab_size=50277,
-            ssm_cfg={},
-            rms_norm=rms_norm,
-            residual_in_fp32=True,
-            fused_add_norm=fused_add_norm,
-            pad_vocab_size_multiple=8
-        )
-    elif model_name == "mamba-370m":
-        """mamba-370m config"""
-        d_state = 16 # default
-        cfg = MambaConfig(
-            d_model=1024,
-            n_layer=48,
-            vocab_size=50277,
-            ssm_cfg={},
-            rms_norm=rms_norm,
-            residual_in_fp32=True,
-            fused_add_norm=fused_add_norm,
-            pad_vocab_size_multiple=8
-        )
-    elif model_name == "mamba-130m":
-        """mamba-130m config"""
-        d_state = 16 # default
-        cfg = MambaConfig(
-            d_model=768,
-            n_layer=24,
-            vocab_size=50277,
-            ssm_cfg={},
-            rms_norm=rms_norm,
-            residual_in_fp32=True,
-            fused_add_norm=fused_add_norm,
-            pad_vocab_size_multiple=8
-        )
+def trace_handler(prof: torch.profiler.profile, dir_name="torch_profile_output",
+                  worker_name = None, use_gzip: bool = False,
+                  file_prefix="prefilling", device="cuda:0"):
+    if not os.path.isdir(dir_name):
+        try:
+            os.makedirs(dir_name, exist_ok=True)
+        except Exception as e:
+            raise RuntimeError("Can't create directory: " + dir_name) from e
+    if not worker_name:
+        worker_name = f"{socket.gethostname()}_{os.getpid()}"
+    # Use nanosecond here to avoid naming clash when exporting the trace
+    timestamp = time.time_ns()
+    file_name = f"{file_prefix}.{worker_name}.{timestamp}.pt.trace.json"
+    if use_gzip:
+        file_name = file_name + ".gz"
+    prof.export_chrome_trace(os.path.join(dir_name, file_name))
+    # Fix the rank issue for  HolisticTraceAnalysis
+    # reference: https://github.com/facebookresearch/HolisticTraceAnalysis/issues/107
+    # FIXME: This does not work for json.gz
+    # rn_rank = np.random.randint(low=0, high=16, dtype=int) # If there are multiple traces files, then each file should have a unique rank value.
+    if use_gzip:
+        with gzip.open(os.path.join(dir_name, file_name), mode="rt") as fin:
+            data = json.loads(fin.read())
+        data["distributedInfo"] = {"rank": 0} # must use 0. I don't know why. If there are multiple traces files, then each file should have a unique rank value.
+        with gzip.open(os.path.join(dir_name, file_name), 'w') as fout:
+            fout.write(json.dumps(data).encode('utf-8')) 
     else:
-        raise ValueError(f"Unrecognized model: {model_name}")
-    model = MambaLMHeadModel(cfg, device=device, dtype=dtype)
-    return model, "mamba"
+        with open(os.path.join(dir_name, file_name), "r") as fin:
+            data = json.load(fin)
+        data["distributedInfo"] = {"rank": 0} # must use 0. I don't know why. If there are multiple traces files, then each file should have a unique rank value.
+        with open(os.path.join(dir_name, file_name), "w") as fout:
+            json.dump(data, fout, indent=2)
+
+    analyzer = TraceAnalysis(trace_files={0: file_name}, trace_dir=dir_name)
+    kernel_type_metrics_df, kernel_metrics_df = analyzer.get_gpu_kernel_breakdown(visualize=False, num_kernels=100)
+    kernel_type_metrics_df.to_csv(os.path.join(dir_name, f'kernel_type_metrics.{file_prefix}.{timestamp}.csv'), index=False)
+    kernel_metrics_df.to_csv(os.path.join(dir_name, f'kernel_metrics.{file_prefix}.{timestamp}.csv'), index=False)
+    # this feature is at https://github.com/facebookresearch/HolisticTraceAnalysis/pull/209
+    # To get accurate kernel results, checkout this branch https://github.com/hychiang-git/HolisticTraceAnalysis/tree/dev/no_merge_cpu_kernels
+    if hasattr(analyzer, "get_gpu_user_annotation_breakdown"):
+        try:
+            user_annotation_kernel_type_metrics_df, user_annotation_metrics_df = analyzer.get_gpu_user_annotation_breakdown(visualize=False, num_kernels=100)
+            user_annotation_kernel_type_metrics_df.to_csv(os.path.join(dir_name, f'user_annotation_kernel_type_metrics.{file_prefix}.{timestamp}.csv'), index=False)
+            user_annotation_metrics_df.to_csv(os.path.join(dir_name, f'user_annotation_metrics.{file_prefix}.{timestamp}.csv'), index=False)
+        except Exception as e:
+            logging.warning(f"Failed to get user annotation breakdown: {e}")
+    # Construct the memory timeline file.
+    # !!! This does not work for graph cache !!!
+    html_name = f"{file_prefix}.{worker_name}.{timestamp}.html"
+    prof.export_memory_timeline(os.path.join(dir_name, html_name), device=device)
+
+def get_size(module):
+    if module is None:
+        return 0
+    if isinstance(module, torch.nn.Parameter) or isinstance(module, torch.Tensor):
+        return module.nelement() * module.element_size()
+    param_size = 0
+    buffer_size = 0
+    for param in module.parameters():
+        param_size += param.nelement() * param.element_size()
+    for buffer in module.buffers():
+        buffer_size += buffer.nelement() * buffer.element_size()
+    return param_size + buffer_size
+
 
 def profile_size(model, batch_size=1, prompt_len=1024):
     logging.info(">>> Profiling model size")
     max_length = prompt_len + 1
-    input_ids = torch.randint(low=0, high=50277, size=(batch_size, prompt_len,)).cuda()
-    inference_params = InferenceParams(max_seqlen=max_length, max_batch_size=batch_size)
-    logging.info("Warmup...")
-    with torch.no_grad():
-        # to initialize conv_state and ssm_state
-        for i in range(5):
-            out = model(input_ids, inference_params=inference_params)
-    torch.cuda.synchronize()
-
+    device = next(iter(model.parameters())).device
+    inf_cache = model.allocate_inference_cache(batch_size, max_length)
+    lengths_per_sample = torch.full((batch_size,), prompt_len, dtype=torch.int32, device=device)
+    inference_params = InferenceParams(
+        max_seqlen=max_length,
+        max_batch_size=batch_size,
+        seqlen_offset=prompt_len, # set the model to generation mode
+        key_value_memory_dict=inf_cache,
+        lengths_per_sample=lengths_per_sample,
+    )
     logging.info("Start profiling...")
     param_size = 0
     for param in model.parameters():
@@ -134,18 +121,72 @@ def profile_size(model, batch_size=1, prompt_len=1024):
     for buffer in model.buffers():
         buffer_size += buffer.nelement() * buffer.element_size()
 
-    state_size = 0
+    conv_state_size = 0
+    ssm_state_size = 0
     for _, (conv_state, ssm_state) in inference_params.key_value_memory_dict.items():
-        state_size += conv_state.nelement() * conv_state.element_size()
-        state_size += ssm_state.nelement() * conv_state.element_size()
+        conv_state_size += conv_state.nelement() * conv_state.element_size()
+        ssm_state_size += ssm_state.nelement() * ssm_state.element_size()
+
+    op_types = {
+        "linear": 0,
+        "conv": 0,
+        "norm": get_size(model.backbone.norm_f),
+        "sscan": 0,
+        "embedding": get_size(model.backbone.embedding),
+        "output": 0 if model.lm_head.weight is model.backbone.embedding.weight # tie weights
+            else get_size(model.lm_head),
+    }
+    for layer in model.backbone.layers:
+        if isinstance(layer, Block):
+            if isinstance(layer.mixer, (Mamba2, W4A16QMamba2)):
+                op_types["linear"] += (get_size(layer.mixer.in_proj) + get_size(layer.mixer.out_proj))
+                op_types["conv"] += get_size(layer.mixer.conv1d)
+                op_types["norm"] += get_size(layer.norm) + get_size(layer.mixer.norm)
+                op_types["sscan"] += get_size(layer.mixer.A_log) + get_size(layer.mixer.D) + get_size(layer.mixer.dt_bias)
+            elif isinstance(layer.mixer, (W4A8QMamba2, W8A8QMamba2)):
+                op_types["linear"] += (get_size(layer.mixer.in_proj) + get_size(layer.mixer.out_proj))
+                op_types["conv"] += get_size(layer.mixer.conv1d)
+                op_types["norm"] += get_size(layer.norm) + get_size(layer.mixer.norm)
+                op_types["sscan"] += get_size(layer.mixer.qchunk_scan)
+            elif isinstance(layer.mixer, (Mamba, W4A16QMamba)):
+                op_types["linear"] += (
+                    get_size(layer.mixer.in_proj) +
+                    get_size(layer.mixer.x_proj) +
+                    get_size(layer.mixer.dt_proj) +
+                    get_size(layer.mixer.out_proj)
+                )
+                op_types["conv"] += get_size(layer.mixer.conv1d)
+                op_types["norm"] += get_size(layer.norm)
+                op_types["sscan"] += get_size(layer.mixer.A_log) + get_size(layer.mixer.D)
+                if hasattr(layer.mixer, "dt_proj_bias"):
+                    op_types["sscan"] += get_size(layer.mixer.dt_proj_bias)
+            elif isinstance(layer.mixer, (W4A8QMamba, W8A8QMamba)):
+                op_types["linear"] += (
+                    get_size(layer.mixer.in_proj) +
+                    get_size(layer.mixer.x_proj) +
+                    get_size(layer.mixer.dt_proj) +
+                    get_size(layer.mixer.out_proj)
+                )
+                op_types["conv"] += get_size(layer.mixer.conv1d)
+                op_types["norm"] += get_size(layer.norm)
+                op_types["sscan"] += get_size(layer.mixer.selective_scan)
+            else:
+                raise ValueError(f"Unsupported mixer type: {layer.mixer.__class__}")
 
     model_mb = (param_size + buffer_size) / 1024**2
-    state_mb = (state_size) / 1024**2
-    logging.info('model size: {:.3f} MB'.format(model_mb))
-    logging.info('state size: {:.3f} MB'.format(state_mb))
+    state_mb = (conv_state_size + ssm_state_size) / 1024**2
+    logging.info('state size: {:.3f} MB, detailed breakdown:'.format(state_mb))
+    logging.info(f"-- conv state: {conv_state_size / 1024**2:.3f} MB")
+    logging.info(f"-- ssm state: {ssm_state_size / 1024**2:.3f} MB")
+    logging.info('model size: {:.3f} MB, detailed breakdown:'.format(model_mb))
+    op_sum_mb = 0
+    for k, v in op_types.items():
+        logging.info(f"-- {k}: {v / 1024**2:.3f} MB")
+        op_sum_mb += v / 1024**2
+    assert op_sum_mb == model_mb, f"Model size breakdown does not match the total model size: {op_sum_mb} != {model_mb}"
 
 
-def profile_ttft(model, batch_size=1, prompt_len=1024, repeats=100, torch_profile=False, outfile=""):
+def profile_ttft(model, batch_size=1, prompt_len=1024, repeats=100, torch_profile=False, torch_profile_dir=""):
     # no graph cache mode for TTFT (prefilling stage)
     logging.info(">>> Profiling TTFT (prefilling stage)")
     max_length = prompt_len + 1
@@ -172,29 +213,29 @@ def profile_ttft(model, batch_size=1, prompt_len=1024, repeats=100, torch_profil
     
     if torch_profile:
         logging.info("Run torch profiler...")
-        outfile_postfix = f"{outfile}"
+        outfile_prefix = f"ttft_prompt_len_{prompt_len}"
         with torch.profiler.profile(
             activities=[
                 torch.profiler.ProfilerActivity.CPU,
                 torch.profiler.ProfilerActivity.CUDA,
             ],
-            schedule=torch.profiler.schedule(wait=1, warmup=5, active=6, repeat=1),
+            schedule=torch.profiler.schedule(wait=0, warmup=0, active=5, repeat=1),
             record_shapes=True,
             profile_memory=True,
             with_stack=True,
             on_trace_ready=partial(
-                trace_handler, file_postfix=outfile_postfix, device="cuda:0"
+                trace_handler, dir_name=torch_profile_dir, use_gzip=True, file_prefix=outfile_prefix, device="cuda:0"
             )
         ) as prof:
 
             with torch.no_grad():
-                # (wait=1, warmup=5, active=6) , repeat=1
-                for _ in range(12):
+                # (wait=0, warmup=0, active=5) , repeat=1
+                for _ in range(5):
                     with record_function("## forward ##"):
                         out = model(prompt, inference_params=inference_params, num_last_tokens=1)
                     prof.step()
 
-def profile_tpot(model, cache_type=torch.int8, batch_size=1, prompt_len=1024, repeats=100, cache_graph=False, torch_profile=False, outfile=""):
+def profile_tpot(model, cache_type=torch.int8, batch_size=1, prompt_len=1024, repeats=100, cache_graph=False, torch_profile=False, torch_profile_dir=""):
     logging.info(">>> Profiling TPOT (generation stage)")
     max_length = prompt_len + 1
     device = next(iter(model.parameters())).device
@@ -251,28 +292,28 @@ def profile_tpot(model, cache_type=torch.int8, batch_size=1, prompt_len=1024, re
 
     if torch_profile:
         logging.info("Run torch profiler...")
-        outfile_postfix = f"{outfile}"
+        outfile_prefix = f"tpot"
         with torch.profiler.profile(
             activities=[
                 torch.profiler.ProfilerActivity.CPU,
                 torch.profiler.ProfilerActivity.CUDA,
             ],
-            schedule=torch.profiler.schedule(wait=1, warmup=5, active=6, repeat=1),
+            schedule=torch.profiler.schedule(wait=0, warmup=0, active=5, repeat=1),
             record_shapes=True,
             profile_memory=True,
             with_stack=True,
             on_trace_ready=partial(
-                trace_handler, file_postfix=outfile_postfix, device="cuda:0"
+                trace_handler, dir_name=torch_profile_dir, use_gzip=False, file_prefix=outfile_prefix, device="cuda:0"
             )
         ) as prof:
 
             with torch.no_grad():
-                # (wait=1, warmup=5, active=6) , repeat=1
-                for _ in range(12):
+                # (wait=0, warmup=0, active=5) , repeat=1
+                for _ in range(5):
                     generate(new_input_token, inference_params)
                     prof.step()
 
-def profile_ttlt(model, cache_type=torch.int8, batch_size=1, prompt_len=1024, gen_len=128, repeats=100, cache_graph=False, torch_profile=False, outfile=""):
+def profile_ttlt(model, cache_type=torch.int8, batch_size=1, prompt_len=1024, gen_len=128, repeats=100, cache_graph=False, torch_profile=False, torch_profile_dir=""):
     logging.info(">>> Profiling TTLT (prefilling + generation)")
     logging.info(f"batch_size: {batch_size}, prompt_len: {prompt_len}, gen_len:{gen_len}")
 
@@ -351,65 +392,101 @@ def profile_ttlt(model, cache_type=torch.int8, batch_size=1, prompt_len=1024, ge
 
     if torch_profile:
         logging.info("Run torch profiler...")
-        logging.warn("Profile ttlt with torch profiler is slow")
-        outfile_postfix = f"{outfile}"
+        logging.warning("Profile ttlt with torch profiler is very slow...")
+        outfile_prefix = f"ttlt_prompt_len_{prompt_len}_gen_len_{gen_len}_cache_graph_{cache_graph}"
         with torch.profiler.profile(
             activities=[
                 torch.profiler.ProfilerActivity.CPU,
                 torch.profiler.ProfilerActivity.CUDA,
             ],
-            schedule=torch.profiler.schedule(wait=1, warmup=5, active=6, repeat=1),
+            schedule=torch.profiler.schedule(wait=0, warmup=0, active=5, repeat=1),
             record_shapes=True,
             profile_memory=True,
             with_stack=True,
             on_trace_ready=partial(
-                trace_handler, file_postfix=outfile_postfix, device="cuda:0"
+                trace_handler, dir_name=torch_profile_dir, use_gzip=False, file_prefix=outfile_prefix, device="cuda:0"
             )
         ) as prof:
 
             with torch.no_grad():
-                # (wait=1, warmup=5, active=6) , repeat=1
-                for _ in range(12):
+                # (wait=0, warmup=0, active=5) , repeat=1
+                for _ in range(5):
                     run(batch_size, prompt_len, gen_len)
                     prof.step()
 
+def main(args):
+    device = "cuda"
+    dtype = torch.float16
 
-def main(args):    
-    model, model_type = build_mamba(args)
-    model.eval()
-    model.config.use_cache = False
-    
-    if args.eval_fp16:
-        if args.ttft:
-            profile_ttft(model, args.batch_size, args.prompt_len, args.repeats, args.torch_profile, "ttft_fp16")
-        if args.tpot:
-            profile_tpot(model, torch.float16, args.batch_size, args.prompt_len, args.repeats, args.cache_graph, args.torch_profile, "tpot_fp16")
-        if args.ttlt:
-            profile_ttlt(model, torch.float16, args.batch_size, args.prompt_len, args.gen_len, args.repeats, args.cache_graph, args.torch_profile, "ttlt_fp16")
-        if args.size:
-            profile_size(model, args.batch_size, args.prompt_len)
-    else:
-        if not os.path.isfile(args.act_scales_cache):
-            logging.warning(f"Not found {args.act_scales_cache}, get scaling factors from the random initialized model")
+    logging.info(f"Loading {args.model}")
+    model_name = args.model.lower().split('/')[-1]
+    model_type = model_name.split('-')[0] # Assume that the models name is like "model_type-<model_size, model version>"
+    is_mamba = args.model.split("/")[-1].startswith("mamba") # mamba or mamba2
+    is_quamba = args.model.split("/")[-1].startswith("quamba") # quamba or quamba2
+    # cg_dtype = torch.float16
+    # load model
+    start = time.time()
+    if is_mamba:
+        if "mamba2-8b" not in args.model: # for mamba or mamba2
             tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-neox-20b", resume_download=None)
-            act_scales = run_calibration(model, "mamba", tokenizer)
         else:
-            act_scales = torch.load(args.act_scales_cache)
-        # Replace module with quantized version
-        model = quantize_blocks(model, model_type, act_scales, "cuda")
-        model.eval()
-            
-        if args.ttft:
-            profile_ttft(model, args.batch_size, args.prompt_len, args.repeats, args.torch_profile, "ttft_int8")
-        if args.tpot:
-            profile_tpot(model, torch.int8, args.batch_size, args.prompt_len, args.repeats, args.cache_graph, args.torch_profile, "tpot_int8")
-        if args.ttlt:
-            profile_ttlt(model, torch.int8, args.batch_size, args.prompt_len, args.gen_len, args.repeats, args.cache_graph, args.torch_profile, "ttlt_int8")
-        if args.size:
-            profile_size(model, args.batch_size, args.prompt_len)
-    
+            # NOTE(hychiang): Special handle for mamba2-8b's tokenizer from NVIDIA Megatron
+            tokenizer_ckpt = os.path.join(args.model, "mt_nlg_plus_multilingual_ja_zh_the_stack_frac_015_256k.model")
+            tokenizer = _GPTSentencePieceTokenizer(tokenizer_ckpt)
+        model = MambaLMHeadModel.from_pretrained(args.model, device=device, dtype=dtype)
+        if args.quantize:
+            model = quantize_model_mamba(model, model_type, tokenizer, device, args,
+                                quantization_config=None)
+            # if "a8" in args.model:
+            #     cg_dtype = torch.int8
+    elif is_quamba:
+        # ut-enyac/quamba-xb-wxax --pretrained_dir pretrained_models
+        # ut-enyac/quamba2-xb-wxax --pretrained_dir pretrained_models
+        assert args.pretrained_dir, "Please specify the --pretrained_dir for quamba models"
+        quantized_model_path = os.path.join(args.pretrained_dir, args.model)
+        assert os.path.exists(quantized_model_path), f"Quantized model {quantized_model_path} not found"
+        if "quamba2-8b" not in args.model: # for mamba or mamba2
+            tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-neox-20b", resume_download=None)
+        else:
+            # NOTE(hychiang): Special handle for mamba2-8b's tokenizer from NVIDIA Megatron
+            tokenizer_ckpt = os.path.join(args.pretrained_dir, args.model, "mt_nlg_plus_multilingual_ja_zh_the_stack_frac_015_256k.model")
+            tokenizer = _GPTSentencePieceTokenizer(tokenizer_ckpt)
+        model = QuambaLMHeadModel.from_pretrained(quantized_model_path, device="cuda")
+        # if "a8" in args.model:
+        #     cg_dtype = torch.int8
+    else:
+        # TODO: Not sure if this will run correctly for some transformer models
+        tokenizer = AutoTokenizer.from_pretrained(args.model)
+        model = AutoModelForCausalLM.from_pretrained(args.model, device_map={"": device}, torch_dtype=dtype)
+        if args.quantize:
+            raise ValueError(f"Unsupport quantizing {args.model}, only supports mamba now")
+    elaspe_time = time.time() - start
+    model.eval()
+    logging.info(f"Loading model takes: {elaspe_time:.2f} s")
+    # logging.info(f"Number of parameters: {sum(p.numel() for p in model.parameters() if p.requires_grad)}")
+    param_size = 0
+    for param in model.parameters():
+        param_size += param.nelement() * param.element_size()
+    buffer_size = 0
+    for buffer in model.buffers():
+        buffer_size += buffer.nelement() * buffer.element_size()
+    model_mb = (param_size + buffer_size) / 1024**2
+    logging.info(f"model size: {model_mb:.3f} MB")
+    logging.info(f"cache CUDA graph: {args.cache_graph}")
+
+    block_name = model.backbone.layers[0].mixer.__class__.__name__
+    if args.ttft:
+        if args.cache_graph:
+            logging.warning("TTFT does not support cache_graph mode, set to False")
+        profile_ttft(model, args.batch_size, args.prompt_len, args.repeats, args.torch_profile, f"torch_profile/{model_name}_{block_name}")
+    if args.tpot:
+        profile_tpot(model, None, args.batch_size, args.prompt_len, args.repeats, args.cache_graph, args.torch_profile, f"torch_profile/{model_name}_{block_name}")
+    if args.ttlt:
+        profile_ttlt(model, None, args.batch_size, args.prompt_len, args.gen_len, args.repeats, args.cache_graph, args.torch_profile, f"torch_profile/{model_name}_{block_name}")
+    if args.size:
+        profile_size(model, args.batch_size, args.prompt_len)
     if not args.ttft and not args.tpot and not args.ttlt and not args.size:
-        logging.warn("No profiling task to run with, try `--ttft`, `--tpot`, `--ttlt`, `--size`?")
+        logging.warning("No profiling task to run with, try `--ttft`, `--tpot`, `--ttlt`, `--size`?")
 
 if __name__ =='__main__':    
     # Fix all possible random seef for reproduce
@@ -438,19 +515,6 @@ if __name__ =='__main__':
         help='The number of generation tokens output from Mamba. Only for TTLT. (default: 128)'
     )
     parser.add_argument(
-        '--act_scales_cache', type=str, 
-        help='The pre-calibrated activaction scaling factors for static quant.'
-            'Performing daynamic quant if not provided. (default: None)'
-    )
-    parser.add_argument(
-        '--eval_fp16', action='store_true',
-        help='Whether to evaluate the performance of fp16 unquantized model.'
-    )
-    parser.add_argument(
-        '--disable_triton', action='store_true',
-        help='Whether to disable Triton. This will set rmsnorm and use_add_norm to False for Mamba fp16.'
-    )
-    parser.add_argument(
         '--size', action='store_true',
         help='Profile model total size (i.e. parameters + buffers)'
     )
@@ -474,7 +538,60 @@ if __name__ =='__main__':
         '--torch_profile', action='store_true',
         help='Whether to launch the pytorch profiler.'
     )
-    
+    # Load/store model and act_scales_cache
+    parser.add_argument(
+        '--pretrained_dir', type=str, default=None,
+        help='The path to store both the quantized model and its act_scales_cache.'
+        'Not storing if not provided. (default: None)'
+    )
+    # quantization parameters
+    parser.add_argument(
+        '--quantize', action='store_true', default=False,
+    )
+    parser.add_argument(
+        '--calib_data_num', type=int, default=512,
+        help='Number of calibration data'
+    )
+    parser.add_argument(
+        '--calib_seqlen', type=int, default=512,
+        help='Number of calibration data'
+    )
+    parser.add_argument(
+        '--do_reordering',  action='store_true', default=False,
+        help='Whether to do the reordering (default: False)'
+    )
+    parser.add_argument(
+        '--apply_gptq',  action='store_true', default=False,
+        help='Whether to apply the GPTQ quantizer (default: False)'
+    )
+    parser.add_argument(
+        '--group_heads',  action='store_true', default=False,
+        help='Whether to group heads during the reordering (default: False)'
+    )
+    parser.add_argument(
+        "--quantize_embedding", action='store_true', default=False,
+        help="Whether to quantize the embedding layer (default: False)"
+    )
+    parser.add_argument(
+        "--quantize_lm_head", action='store_true', default=False,
+        help="Whether to quantize the lm_head layer (default: False)"
+    )
+    parser.add_argument(
+        '--w_bits', type=int, default=8,
+        help='The bit-width for weights applied in the real quantization (defualt: 8)'
+    )
+    parser.add_argument(
+        '--a_bits', type=int, default=8,
+        help='The bit-width for activations applied in the real quantization (defualt: 8)'
+    )
+    parser.add_argument(
+        '--hybrid_blocks', action='store_true', default=False,
+        help='Whether to create hybrid blocks for configuring act_bits of blocks in a dynamic fashion.'
+    )
+    parser.add_argument(
+        '--hybrid_blocks_config', type=str, default=None,
+        help='Path to the the configuration for hybrid blocks'
+    )
     args = parser.parse_args()
     logging.basicConfig(
         level=logging.INFO,

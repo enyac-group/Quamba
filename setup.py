@@ -78,10 +78,46 @@ if CUDA_HOME is not None:
             f"{PACKAGE_NAME} is only supported on CUDA 11.6 and above.  "
             "Note: make sure nvcc has a supported version by running nvcc -V."
         )
-# DO NOT USE GENCODE FLAG FOR CUTLASS
+
+# sm87 for Nano
 # cc_flag.append("-gencode")
-# cc_flag.append("arch=compute_80,code=sm_80")
-# cc_flag.append("-arch=sm_80")
+# cc_flag.append("arch=compute_87,code=sm_87")
+# cc_flag.append("-arch=sm_87")
+
+ext_modules.append(
+    CUDAExtension(
+        name="quant_embedding_cuda",
+        sources=[
+            "csrc/embedding/quant_embedding.cpp",
+            "csrc/embedding/quant_embedding_fwd.cu",
+        ],
+        extra_compile_args={
+            "cxx": ["-O3", "-std=c++17"],
+            "nvcc": append_nvcc_threads(
+                [
+                    "-O3",
+                    "-std=c++17",
+                    "-U__CUDA_NO_HALF_OPERATORS__",
+                    "-U__CUDA_NO_HALF_CONVERSIONS__",
+                    "-U__CUDA_NO_BFLOAT16_OPERATORS__",
+                    "-U__CUDA_NO_BFLOAT16_CONVERSIONS__",
+                    "-U__CUDA_NO_BFLOAT162_OPERATORS__",
+                    "-U__CUDA_NO_BFLOAT162_CONVERSIONS__",
+                    "--expt-relaxed-constexpr",
+                    "--expt-extended-lambda",
+                    "--use_fast_math",
+                    "--ptxas-options=-v",
+                    "-lineinfo",
+                ]
+                + cc_flag
+            ),
+        },
+        include_dirs=[
+            Path(this_dir) / "csrc",
+            Path(this_dir) / "csrc" / "embedding",
+        ],
+    )
+)
 
 ext_modules.append(
     CUDAExtension(
@@ -89,7 +125,6 @@ ext_modules.append(
         sources=[
             "csrc/selective_scan/quant_sscan.cpp",
             "csrc/selective_scan/quant_sscan_fwd.cu",
-            "csrc/selective_scan/quant_sscan_update.cu",
         ],
         extra_compile_args={
             "cxx": ["-O3", "-std=c++17"],
@@ -212,6 +247,42 @@ ext_modules.append(
             "csrc/causal_conv1d/quant_causal_conv1d.cpp",
             "csrc/causal_conv1d/quant_causal_conv1d_fwd.cu",
             "csrc/causal_conv1d/quant_causal_conv1d_update.cu",
+        ],
+        extra_compile_args={
+            "cxx": ["-O3", "-std=c++17"],
+            "nvcc": append_nvcc_threads(
+                [
+                    "-O3",
+                    "-std=c++17",
+                    "-U__CUDA_NO_HALF_OPERATORS__",
+                    "-U__CUDA_NO_HALF_CONVERSIONS__",
+                    "-U__CUDA_NO_BFLOAT16_OPERATORS__",
+                    "-U__CUDA_NO_BFLOAT16_CONVERSIONS__",
+                    "-U__CUDA_NO_BFLOAT162_OPERATORS__",
+                    "-U__CUDA_NO_BFLOAT162_CONVERSIONS__",
+                    "--expt-relaxed-constexpr",
+                    "--expt-extended-lambda",
+                    "--use_fast_math",
+                    "--ptxas-options=-v",
+                    "-lineinfo",
+                ]
+                + cc_flag
+            ),
+        },
+        include_dirs=[
+            Path(this_dir) / "csrc",
+            Path(this_dir) / "csrc" / "causal_conv1d",
+        ],
+    )
+)
+
+ext_modules.append(
+    CUDAExtension(
+        name="quamba2_conv1d_cuda",
+        sources=[
+            "csrc/causal_conv1d/quamba2_conv1d.cpp",
+            "csrc/causal_conv1d/quamba2_conv1d_fwd.cu",
+            "csrc/causal_conv1d/quamba2_conv1d_update.cu",
         ],
         extra_compile_args={
             "cxx": ["-O3", "-std=c++17"],

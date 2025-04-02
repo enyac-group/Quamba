@@ -11,6 +11,11 @@
 
 template<int BYTES> struct BytesToType {};
 
+template<> struct BytesToType<32> {
+    using Type = std::array<char, 32>;
+    static_assert(sizeof(Type) == 32);
+};
+
 template<> struct BytesToType<16> {
     using Type = uint4;
     static_assert(sizeof(Type) == 16);
@@ -61,4 +66,10 @@ static __device__ inline T run(T x, Operator &op) {
     x = op(x, __shfl_xor_sync(uint32_t(-1), x, 1));
     return x;
 }
+};
+
+
+template<typename T>
+constexpr T constexpr_min(T a, T b) {
+    return std::min(a, b);
 };

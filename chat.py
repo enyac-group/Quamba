@@ -11,7 +11,8 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 from transformers.generation import TextStreamer
 from mamba_ssm.models.mixer_seq_simple import MambaLMHeadModel
 
-from quamba.real_quant.modelutils_mamba import quantize_blocks, run_calibration
+from quamba.quamba_mixer_seq import QuambaLMHeadModel
+from quamba.modelutils_mamba import quantize_model_mamba
 
 def preprocess(conversation, tokenizer, conversation_template, max_tokens, device):
     """
@@ -31,12 +32,20 @@ def main(args):
     dtype = torch.float16
 
     logging.info(f"Loading {args.model}")
-    is_mamba = args.model.split("/")[-1].startswith("mamba-")
-    if not is_mamba:
-        raise ValueError("Not support other models now")
+    model_name = args.model.lower().split('/')[-1]
+    model_type = model_name.split('-')[0] # Assume that the models name is like "model_type-<model_size, model version>"
+    hf_repo = args.model.split("/")[0]
+    is_mamba = args.model.split("/")[-1].startswith("mamba")  # mamba or mamba2
+    is_quamba = args.model.split("/")[-1].startswith("quamba") # quamba or quamba2
+    if not is_mamba and not is_quamba:
+        raise ValueError(f"Unsupported model {args.model}, only supports mamba now "
+                         "Try `havenhq/mamba-chat`?")
+    if not hf_repo == "havenhq" and "chat" not in args.model:
+        raise ValueError("Only `havenhq/mamba-chat` will have the correct chatting results, "
+                        "please see https://github.com/redotvideo/mamba-chat for more details.")
 
     # build tokenizer
-    tokenizer = AutoTokenizer.from_pretrained(args.model)
+    tokenizer = AutoTokenizer.from_pretrained("havenhq/mamba-chat")
     tokenizer.eos_token = "<|endoftext|>"
     tokenizer.pad_token = tokenizer.eos_token
     tokenizer.chat_template = AutoTokenizer.from_pretrained("HuggingFaceH4/zephyr-7b-beta").chat_template
@@ -44,38 +53,50 @@ def main(args):
     streamer = TextStreamer(tokenizer, skip_prompt=True)
     # load model and quantize it
     start = time.time()
-    model = MambaLMHeadModel.from_pretrained(args.model, device="cuda", dtype=dtype)
-    elaspe_time = time.time() - start
-    logging.info(f"Loading model takes: {elaspe_time:.2f} s")
-    logging.info(f"Number of parameters: {sum(p.numel() for p in model.parameters() if p.requires_grad)}")
-
-    if args.quantize:
-        if os.path.isfile(args.act_scales_cache):
-            logging.info(f"Found activation scales cache {args.act_scales_cache}")
-            act_scales = torch.load(args.act_scales_cache)
-        else:
+    # cg_dtype = torch.float16
+    if is_mamba:
+        model = MambaLMHeadModel.from_pretrained(args.model, device="cuda", dtype=dtype)
+        if args.quantize:
             calibration_dataset = load_dataset("HuggingFaceH4/ultrachat_200k", split="train_gen")
             calibration_dataset.shuffle(seed=42)
             preprocess_fn = partial(preprocess, tokenizer=tokenizer,
                                 conversation_template=tokenizer.chat_template,
                                 max_tokens=1024, device=device)
-            act_scales = run_calibration(model, "mamba", tokenizer, seq_len=1024,
-                            calibration_dataset=calibration_dataset,
-                            preprocess_fn=preprocess_fn)
-            
-            if args.act_scales_cache:
-                logging.info(f"Store activation scales at {args.act_scales_cache}")
-                torch.save(act_scales, args.act_scales_cache)
-        # quantization
-        logging.info("Start quantizing model...")
-        model = quantize_blocks(model, "mamba", act_scales, device)
-        model.eval()
-    
+            model = quantize_model_mamba(model, model_type, tokenizer, device, args,
+                                quantization_config=None,
+                                calibration_dataset=calibration_dataset,
+                                calib_preprocess_fn=preprocess_fn)
+        # if "a8" in args.model:
+        #     cg_dtype = torch.int8
+    elif is_quamba:
+        # ut-enyac/quamba-chat-wxax --pretrained_dir pretrained_models
+        assert args.pretrained_dir, "Please specify the --pretrained_dir for quamba models"
+        quantized_model_path = os.path.join(args.pretrained_dir, args.model)
+        assert os.path.exists(quantized_model_path), f"Quantized model {quantized_model_path} not found"
+        model = QuambaLMHeadModel.from_pretrained(quantized_model_path, device="cuda")
+        # if "a8" in args.model:
+        #     cg_dtype = torch.int8
+    else:
+        model = AutoModelForCausalLM.from_pretrained(args.model, device_map={"": device}, torch_dtype=dtype)
+        if args.quantize:
+            raise ValueError(f"Unsupport quantizing {args.model}, only supports mamba now")
+    elaspe_time = time.time() - start
+    logging.info(f"Loading model takes: {elaspe_time:.2f} s")
+    # logging.info(f"Number of parameters: {sum(p.numel() for p in model.parameters() if p.requires_grad)}")
+    param_size = 0
+    for param in model.parameters():
+        param_size += param.nelement() * param.element_size()
+    buffer_size = 0
+    for buffer in model.buffers():
+        buffer_size += buffer.nelement() * buffer.element_size()
+    model_mb = (param_size + buffer_size) / 1024**2
+    logging.info('model size: {:.3f} MB'.format(model_mb))
+
     # generate function
     generate_fn = partial(model.generate,
         max_length=256,
         cg=args.cache_graph,
-        cg_dtype=torch.int8 if args.quantize else torch.float16,
+        # cg_dtype=cg_dtype,
         temperature=args.temperature,
         top_k=args.topk,
         top_p=args.topp,
@@ -149,14 +170,59 @@ if __name__ =='__main__':
     parser.add_argument(
         '--use_testing_prompts', action='store_true', default=False,
     )
+    # Load/store model and act_scales_cache
+    parser.add_argument(
+        '--pretrained_dir', type=str, default=None,
+        help='The path to store both the quantized model and its act_scales_cache.'
+        'Not storing if not provided. (default: None)'
+    )
     # quantization parameters
     parser.add_argument(
         '--quantize', action='store_true', default=False,
     )
     parser.add_argument(
-        '--act_scales_cache', type=str, 
-        help='The pre-calibrated activaction scaling factors for static quant.'
-            'Performing daynamic quant if not provided. (default: None)'
+        '--calib_data_num', type=int, default=512,
+        help='Number of calibration data'
+    )
+    parser.add_argument(
+        '--calib_seqlen', type=int, default=512,
+        help='Number of calibration data'
+    )
+    parser.add_argument(
+        '--do_reordering',  action='store_true', default=False,
+        help='Whether to do the reordering (default: False)'
+    )
+    parser.add_argument(
+        '--apply_gptq',  action='store_true', default=False,
+        help='Whether to apply the GPTQ quantizer (default: False)'
+    )
+    parser.add_argument(
+        '--group_heads',  action='store_true', default=False,
+        help='Whether to group heads during the reordering (default: False)'
+    )
+    parser.add_argument(
+        "--quantize_embedding", action='store_true', default=False,
+        help="Whether to quantize the embedding layer (default: False)"
+    )
+    parser.add_argument(
+        "--quantize_lm_head", action='store_true', default=False,
+        help="Whether to quantize the lm_head layer (default: False)"
+    )
+    parser.add_argument(
+        '--w_bits', type=int, default=8,
+        help='The bit-width for weights applied in the real quantization (defualt: 8)'
+    )
+    parser.add_argument(
+        '--a_bits', type=int, default=8,
+        help='The bit-width for activations applied in the real quantization (defualt: 8)'
+    )
+    parser.add_argument(
+        '--hybrid_blocks', action='store_true', default=False,
+        help='Whether to create hybrid blocks for configuring act_bits of blocks in a dynamic fashion.'
+    )
+    parser.add_argument(
+        '--hybrid_blocks_config', type=str, default=None,
+        help='Path to the the configuration for hybrid blocks'
     )
     args = parser.parse_args()
 

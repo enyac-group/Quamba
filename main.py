@@ -7,56 +7,31 @@ from utils import (
 import logging
 import sys
 import os
-from quamba.eval_utils import eval_mamba_zero_shot, evaluate_ppl
+# import this will use lm_eval logging format (see lm_eval/logger.py and lm_eval/__main__.py)
+from eval_utils import eval_mamba_few_shot, eval_mamba_generation, evaluate_ppl
+from quamba.modelutils_mamba import quantize_model_mamba
 
 def main(args):    
     model_name = args.model.lower().split('/')[-1]
     model_type = model_name.split('-')[0] # Assume that the models name is like "model_type-<model_size, model version>"
     assert model_name != None, "Please check the model path."
     logging.info(f"Creating Model:{model_name}")
-    model, tokenizer = build_mamba_and_tokenizer(args, model_type)
+    model, tokenizer, is_quamba = build_mamba_and_tokenizer(args, model_type)
     model.config.use_cache = False
     logs = {}
-    if args.eval_fp16:
-        if args.eval_ppl:
-            logging.info(f"Evaluating ppl result (fp16), dataset: {args.ppl_dataset}")
-            ppl_results = evaluate_ppl(model, tokenizer, model_name, batch_size=args.batch_size, device="cuda", dataset=args.ppl_dataset)
-            logs['ppl'] = ppl_results
-        if args.eval_zero_shot:
-            logging.info(f"Evaluating Result using lm_eval (fp16), task(s): {args.task_list}")
-            lm_eval_results = eval_mamba_zero_shot(
-                model, tokenizer, 
-                model_type=model_type,
-                task_list=args.task_list,
-                batch_size=args.batch_size,
-                fewshot=args.fewshot,
-                limit=100 if args.testing else None
-            )
-            logs['lm_eval'] = lm_eval_results['results']
-        if not args.eval_ppl and not args.eval_zero_shot:
-            logging.warn("No task to run with, try `--eval_ppl`, `--eval_zero_shot`?")
-        if args.log_dir:
-            logs['args'] = vars(args)
-            logs['quantization_config'] = 'fp16'
-            os.makedirs(args.log_dir, exist_ok=True)
-            log_paths = os.path.join(args.log_dir, f"{model_name}_fp16.json")
-            with open(log_paths, 'a') as fp:
-                logging.info(f"Saving result to {log_paths}")
-                json.dump(logs, fp, indent=4)
-        return
-
-    """
-    Start evaluating Quantized Models from here
-    """
-    logging.info(f"evaluating quantization type: {args.quant_type}")
-    if args.quant_type.lower() == "real":
-        from quamba.real_quant.modelutils_mamba import quantize_model_mamba as rlq_mamba
-        model = rlq_mamba(model, model_type, tokenizer, "cuda", args)
-    elif args.quant_type.lower() == "fake":
-        from quamba.fake_quant.modelutils_mamba import quantize_model_mamba as faq_mamba
-        model = faq_mamba(model, model_type, tokenizer, "cuda", args)
+    
+    logging.info(f"Evaluating quantization type: {args.quant_type}")
+    if not args.quant_type.lower() == "fp16":
+        """
+        Start evaluating Quantized Models from here
+        """
+        if not is_quamba:
+            model = quantize_model_mamba(model, model_type, tokenizer, "cuda", args)
     else:
-        logging.error(f"Unrecognized quantization type: {args.quant_type}")
+        """
+        Evaluate the non-quantized models
+        """
+        logging.info(f"Evaluating the performance of fp16 model")
     model.eval()
     
     logs = {}
@@ -65,8 +40,8 @@ def main(args):
         ppl_results = evaluate_ppl(model, tokenizer, model_name, batch_size=args.batch_size, device="cuda", dataset=args.ppl_dataset)
         logs['ppl'] = ppl_results
     if args.eval_zero_shot:
-        logging.info(f"Evaluating Result using lm_eval (quantized), task(s): {args.task_list}")
-        lm_eval_results = eval_mamba_zero_shot(
+        logging.info(f"Evaluating result using lm_eval (quantized), task(s): {args.task_list}")
+        lm_eval_results = eval_mamba_few_shot(
             model, tokenizer, 
             model_type=model_type,
             task_list=args.task_list, 
@@ -74,13 +49,39 @@ def main(args):
             limit=100 if args.testing else None
         )
         logs['lm_eval'] = lm_eval_results['results']
-    if not args.eval_ppl and not args.eval_zero_shot:
-        logging.warn("No task to run with, try `--eval_ppl`, `--eval_zero_shot`?")
+    if args.eval_few_shot:
+        logging.info(f"Evaluating {args.fewshot}-shot result using lm_eval (quantized), task(s): {args.task_list}")
+        lm_eval_results = eval_mamba_few_shot(
+            model, tokenizer, 
+            model_type=model_type,
+            task_list=args.task_list, 
+            batch_size=args.batch_size,
+            fewshot=args.fewshot,
+            limit=100 if args.testing else None
+        )
+        logs['lm_eval'] = lm_eval_results['results']
+    if args.eval_generation:
+        logging.info(f"Evaluating generation result using lm_eval (quantized), task(s): {args.task_list}")
+        lm_eval_results = eval_mamba_generation(
+            model, tokenizer, 
+            model_type=model_type,
+            task_list=args.task_list, 
+            batch_size=args.batch_size,
+            fewshot=args.fewshot,
+            limit=100 if args.testing else None
+        )
+        logs['lm_eval'] = lm_eval_results['results']
+    if not args.eval_ppl and not args.eval_zero_shot and not args.eval_few_shot and not args.eval_generation:
+        logging.warning("No task to run with, try `--eval_ppl`, `--eval_zero_shot`, `--eval_generation`, `--eval_few_shot --fewshot n`?")
         
     if args.log_dir:
         logs['args'] = vars(args)
         os.makedirs(args.log_dir, exist_ok=True)
-        log_paths = os.path.join(args.log_dir, f"{model_name}_int8.json")
+        if args.quant_type.lower() == "fp16":
+            log_paths = os.path.join(args.log_dir, f"{model_name}_fp16.json")
+        else:
+            log_paths = os.path.join(args.log_dir,
+                                     f"{model_name}_{os.path.splitext(args.q_configs.split('/')[-1])[0]}_{args.quant_type}.json")
         with open(log_paths, 'a') as fp:
             logging.info(f"Saving result to {log_paths}")
             json.dump(logs, fp, indent=4)

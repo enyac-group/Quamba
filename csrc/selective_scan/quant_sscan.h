@@ -80,7 +80,7 @@ struct QuantSSMParams: public SSMParamsBase {
     void *__restrict__ scale_D_ptr;
     void *__restrict__ scale_u_ptr;
     void *__restrict__ scale_z_ptr;
+    void *__restrict__ scale_ssm_state_ptr;
     void *__restrict__ scale_delta_ptr;
     void *__restrict__ scale_delta_bias_ptr;
-    void *__restrict__ scale_out_ptr;
 };
