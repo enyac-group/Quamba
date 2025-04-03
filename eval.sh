@@ -3,12 +3,20 @@
 MODEL=$1
 PRECISION=$2
 
-if [[ -z "$MODEL" || -z "$PRECISION" ]]; then
-  echo "Usage: $0 <model> <precision>"
+if [[ -z "$MODEL" ]]; then
+  echo "Usage: $0 <model> [precision]"
   echo "Model options: state-spaces/mamba-2.8b, state-spaces/mamba2-2.7b"
   echo "Precision options: fp16, w8a8, w4a8, w4a16"
+  echo "Note: If precision is omitted, model name must contain 'quamba'"
   exit 1
 fi
+
+# Check if PRECISION is missing and MODEL is not "quamba"
+if [[ -z "$PRECISION" && "$MODEL" != *"quamba"* ]]; then
+  echo "Error: Precision is required unless model contains 'quamba'"
+  exit 1
+fi
+
 
 CMD="python main.py $MODEL --batch_size 16 --eval_zero_shot  --task_list lambada_openai --pretrained_dir ./pretrained_models --log_dir ./logs"
 
