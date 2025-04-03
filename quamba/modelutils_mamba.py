@@ -188,10 +188,10 @@ def run_quamba_calibration(
         model.lm_head.register_forward_hook(partial(stat_hook, op="lm_head", block_idx=-1))
     )
 
+    device = next(model.parameters()).device
     if calibration_dataset is None:
         logger.info("Calibrate with monology/pile-uncopyrighted")
         calibration_dataset = load_dataset("monology/pile-uncopyrighted", data_files="val.jsonl.zst", split="train")
-        device = next(model.parameters()).device
 
         def preprocess(data, tokenizer, max_tokens, device):
             input_ids = tokenizer(data["text"], return_tensors="pt",

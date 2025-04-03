@@ -64,7 +64,6 @@ def main(args):
                                 conversation_template=tokenizer.chat_template,
                                 max_tokens=1024, device=device)
             model = quantize_model_mamba(model, model_type, tokenizer, device, args,
-                                quantization_config=None,
                                 calibration_dataset=calibration_dataset,
                                 calib_preprocess_fn=preprocess_fn)
         # if "a8" in args.model:
