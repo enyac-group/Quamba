@@ -14,7 +14,7 @@
 
 - 🔧 Supports W4A8 / W4A16 / W4AX / W8A8 for Mamba1 and Mamba2
 - 🔻 4× memory reduction
-- 🚀 Achieves 13 tokens per second on Orin Nano 8G with Mamba2-8B
+- 🚀 Achieves 13 tokens per second on Orin Nano 8G with Mamba2-8b
 
 ![Quamba](misc/Quamba2.jpg)
 
@@ -102,72 +102,75 @@ pip install -e 3rdparty/Megatron-LM
 pip install .
 ```
 
+## Model ZOO
+| Models    | W8A8     |  W4A8       |  W4A16  |  W4AX |
+| --------- | ---------|-------------|--------------|------|
+| [Mamba1](https://huggingface.co/collections/ut-enyac/quamba-67edf67881154f4a12e41cb3)    | ✅  |  ✅ | ✅ | - |
+| [Mamba2](https://huggingface.co/collections/ut-enyac/quamba2-67edf74a0880f7fba8438cc3)    | ✅  |  ✅ | ✅ | TBD |
+
+✅ : support all sizes, *e.g*, Mamba2 130m/370m/780m/1.3b/2.7b/8b
+
+## Download Models
+```
+# huggingface-cli download ut-enyac/quamba2-{size}-{precision}  --local-dir pretrained_models/ut-enyac/quamba2-{size}-{precision}
+huggingface-cli download ut-enyac/quamba2-2.7b-w4a8  --local-dir pretrained_models/ut-enyac/quamba2-2.7b-w4a8
+```
+
 ## Generate
 
-To generate the sentence from Mamba (FP16) given an input prompt:
 ```
-python generate.py state-spaces/mamba2-130m --prompt "My cat wrote all this CUDA code for a new language model and" --topp 0.9 --temperature 0.7 --repetition_penalty 1.2
-```
-
-To generate the sentence from Quamba (Int8) given an input prompt:
-```
-python generate.py state-spaces/mamba2-130m --prompt "My cat wrote all this CUDA code for a new language model and" --topp 0.9 --temperature 0.7 --repetition_penalty 1.2 --quantize --cache_graph
+python generate.py ut-enyac/quamba2-2.7b-w4a8 --prompt "My cat wrote all this CUDA code for a new language model and" --topp 0.9 --temperature 0.7 --repetition_penalty 1.2 --quantize --cache_graph --pretrained_dir pretrained_models
 ```
 
-##  Quantization Evaluation
-To evaluate the end-to-end quantization:
+## Evaluate
 ```
-python main.py state-spaces/mamba-130m real \
---act_scales_cache mamba-130m_scales.pt \
---batch_size 1 \
---task_list lambada_openai \
---eval_zero_shot \
---log_dir logs
-```
-
-# Chat
-
-To chat with the fp16 model, use the command:
-```
-# FP16
-python chat.py --cache_graph
-```
-
-To chat with the int8 model, use the command:
-```
-# W8A8 (default)
-python chat.py --cache_graph --quantize --quantize_embedding --quantize_lm_head
-# W4A8
-python chat.py --cache_graph --quantize --w_bits 4 --a_bits 8 --apply_gptq --quantize_embedding --quantize_lm_head
-# W4A16
-python chat.py --cache_graph --quantize --w_bits 4 --a_bits 16 --apply_gptq --quantize_embedding --quantize_lm_head
+bash eval.sh ut-enyac/quamba2-2.7b-w4a8
 ```
 
 
 ## Profile latency and memory
 
-- To profile time-to-first-token (prefilling stage):
+- To profile model size, use `--size`:
 ```
-python profile_mamba.py state-spaces/mamba-2.8b  --act_scales_cache mamba-2.8b_scales.pt --prompt_len 512 --ttft
-```
-
-- To profile time-per-output-token (generation stage):
-```
-python profile_mamba.py state-spaces/mamba-2.8b  --act_scales_cache mamba-2.8b_scales.pt --tpot
+python profile_mamba.py ut-enyac/quamba2-2.7b-w4a8 --prompt_len 512 --size --pretrained_dir pretrained_models
 ```
 
-- To profile time-to-last-token (prefilling + generation stage):
+- To profile time-to-first-token (prefilling stage), use `--ttft`:
 ```
-python profile_mamba.py state-spaces/mamba-2.8b  --act_scales_cache mamba-2.8b_scales.pt --prompt_len 512 --gen_len 512 --ttlt
-```
-
-- To profile memory usage (prefilling + generation stage):
-```
-python profile_mamba.py state-spaces/mamba-2.8b  --act_scales_cache mamba-2.8b_scales.pt --prompt_len 512 --gen_len 512 --size
+python profile_mamba.py ut-enyac/quamba2-2.7b-w4a8 --prompt_len 512 --ttft --pretrained_dir pretrained_models
 ```
 
+- To profile time-per-output-token (generation stage), use `--tpot --cache_graph`:
+```
+python profile_mamba.py ut-enyac/quamba2-2.7b-w4a8 --tpot --cache_graph --pretrained_dir pretrained_models
+```
 
-# Mamba2-8B
+- To profile time-to-last-token (prefilling + generation stage), use `--ttlt --cache_graph`:
+```
+python profile_mamba.py ut-enyac/quamba2-2.7b-w4a8 --prompt_len 512 --gen_len 512 --ttlt --cache_graph --pretrained_dir pretrained_models
+```
+
+## Chat (Mamba1 Only)
+
+```
+huggingface-cli download ut-enyac/quamba-chat-w4a8  --local-dir pretrained_models/ut-enyac/quamba-chat-w4a8 
+python chat.py ut-enyac/quamba-chat-w4a8 --cache_graph --pretrained_dir ./pretrained_models
+```
+
+## Mamba2-8B
+
+**[TL;DR]** We provide the 8B model in all precision formats on Hugging Face. To use it, run:
+```
+huggingface-cli download ut-enyac/quamba2-8b-converted-w4a8  --local-dir pretrained_models/ut-enyac/quamba2-8b-converted-w4a8
+python main.py ut-enyac/quamba2-8b-converted-w4a8 \
+--batch_size 16 \
+--eval_zero_shot \
+--task_list lambada_openai \
+--pretrained_dir ./pretrained_models \
+--log_dir logs
+```
+
+### Convert Nvidia Mamba2-8B to HuggingFace
 
 Download the checkpoint using `huggingface-cli`
 ```
@@ -190,70 +193,29 @@ python convert_mamba2_8b_to_hf.py \
 --model_save_path ./pretrained_models/mamba2-8b-converted
 ```
 
-After running, you will see a directory called `mamba2-8b-converted` has been created. Then you can run it with evaluation, profiling as the instructions above. However, it requires at least *24GB* memory on the GPU to quantize the Mamba2-8B model.
+### Quantize and Evaluate Mamba2-8B
+
+After running, you will see a directory called `mamba2-8b-converted` has been created. Then you can run it with evaluation, profiling as the instructions above. However, it requires at least *24GB* memory on the GPU to quantize the Mamba2-8b model.
 
 For example:
 ```
-python main.py pretrained_models/mamba2-8b-converted real \
+python main.py pretrained_models/mamba2-8b-converted \
 --batch_size 16 \
 --eval_zero_shot \
 --task_list lambada_openai \
---q_configs ./configs/mamba2/w4a8/quamba_in_hsort_gptq.json \
---do_reordering \
+--quantize \
 --group_heads \
 --apply_gptq \
 --quantize_embedding \
 --quantize_lm_head \
 --w_bits 4 \
 --a_bits 8
+--pretrained_dir ./pretrained_models \
+--log_dir logs
 ``` 
 
-Calibrating scaling factors and applying GPTQ can take lots of time, and quantizing models consumes more memory than running the quantized models. 
 
-To avoid re-calculating scaling factors and GPTQ, use `--pretrained_dir ./pretrained_models` to store the quantized model. The checkpoint under `--pretrained_dir ./pretrained_models/ut-enyac/mamba2-8b-converted-w4a8`. 
-
-For example:
-
-```
-python main.py pretrained_models/mamba2-8b-converted real \
---batch_size 16 \
---eval_zero_shot \
---task_list lambada_openai \
---q_configs ./configs/mamba2/w4a8/quamba_in_hsort_gptq.json \
---do_reordering \
---group_heads \
---apply_gptq \
---quantize_embedding \
---quantize_lm_head \
---w_bits 4 \
---a_bits 8 \
---pretrained_dir ./pretrained_models \
---log_dir logs
-```
-
-To run with the stored quantized model:
-
-```
-python main.py pretrained_models/mamba2-8b-converted real \
---batch_size 16 \
---eval_zero_shot \
---task_list lambada_openai \
---q_configs ./configs/mamba2/w4a8/quamba_in_hsort_gptq.json \
---w_bits 4 \
---a_bits 8 \
---pretrained_dir ./pretrained_models \
---log_dir logs
-# or
-python main.py ut-enyac/quamba2-8b-converted-w4a8 real \
---batch_size 16 \
---eval_zero_shot \
---task_list lambada_openai \
---q_configs ./configs/mamba2/w4a8/quamba_in_hsort_gptq.json \
---pretrained_dir ./pretrained_models \
---log_dir logs
-```
-
-# Citation
+## Citation
 ```
 @article{chiang2025quamba2,
   title={Quamba2: A Robust and Scalable Post-training Quantization Framework for Selective State Space Models},
@@ -261,10 +223,10 @@ python main.py ut-enyac/quamba2-8b-converted-w4a8 real \
   journal={arXiv preprint arXiv:2503.22879},
   year={2025}
 }
-@article{chiang2024quamba,
-  title={Quamba: A Post-Training Quantization Recipe for Selective State Space Models},
-  author={Chiang, Hung-Yueh and Chang, Chi-Chih and Frumkin, Natalia and Wu, Kai-Chiang and Marculescu, Diana},
-  journal={arXiv preprint arXiv:2410.13229},
-  year={2024}
+@inproceedings{chiang2025quamba,
+  title = {Quamba: A Post-Training Quantization Recipe for Selective State Space Models},
+  author = {Chiang*, Hung-Yueh and Chang*, Chi-Chih and Frumkin, Natalia and Wu, Kai-Chiang and Marculescu, Diana},
+  booktitle = {International Conference on Learning Representations (ICLR)},
+  year = {2025},
 }
 ````
