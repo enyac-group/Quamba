@@ -3,7 +3,6 @@
 [Hung-Yueh Chiang](https://hychiang.info/),
 [Chi-Chih Chang](https://ccchang.info/),
 [Natalia Frumkin](https://www.nfrumkin.com),
-
 [Kai-Chiang Wu](https://people.cs.nycu.edu.tw/~kcw/),
 [Mohamed S. Abdelfattah](https://www.mohsaied.com/),
 [Diana Marculescu](https://users.ece.utexas.edu/~dianam/)
@@ -16,7 +15,7 @@
 - 🔻 4× memory reduction
 - 🚀 Achieves 13 tokens per second on Orin Nano 8G with Mamba2-8b
 
-![Quamba](misc/Quamba2.jpg)
+![Quamba](misc/Quamba2.png)
 
 
 ## Real-time Generation on a NVIDIA Orin Nano 8G
