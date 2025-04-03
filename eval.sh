@@ -10,7 +10,7 @@ if [[ -z "$MODEL" || -z "$PRECISION" ]]; then
   exit 1
 fi
 
-CMD="python main.py $MODEL --batch_size 16 --eval_zero_shot  --task_list lambada_openai --pretrained_dir ./pretrained_models"
+CMD="python main.py $MODEL --batch_size 16 --eval_zero_shot  --task_list lambada_openai --pretrained_dir ./pretrained_models --log_dir ./logs"
 
 # Append group_heads flag if model is mamba2
 if [[ "$MODEL" == *"mamba2"* ]]; then
