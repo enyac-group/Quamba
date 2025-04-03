@@ -436,8 +436,7 @@ def main(args):
             tokenizer = _GPTSentencePieceTokenizer(tokenizer_ckpt)
         model = MambaLMHeadModel.from_pretrained(args.model, device=device, dtype=dtype)
         if args.quantize:
-            model = quantize_model_mamba(model, model_type, tokenizer, device, args,
-                                quantization_config=None)
+            model = quantize_model_mamba(model, model_type, tokenizer, device, args)
             # if "a8" in args.model:
             #     cg_dtype = torch.int8
     elif is_quamba:
