@@ -101,7 +101,7 @@ pip install -e 3rdparty/Megatron-LM
 pip install .
 ```
 
-## Model ZOO
+## Model Zoo
 | Models    | W8A8     |  W4A8       |  W4A16  |  W4AX |
 | --------- | ---------|-------------|--------------|------|
 | [Mamba1](https://huggingface.co/collections/ut-enyac/quamba-67edf67881154f4a12e41cb3)    | ✅  |  ✅ | ✅ | - |
