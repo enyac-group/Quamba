@@ -7,6 +7,7 @@
 [Mohamed S. Abdelfattah](https://www.mohsaied.com/),
 [Diana Marculescu](https://users.ece.utexas.edu/~dianam/)
 
+![Quamba CI](https://github.com/enyac-group/Quamba/actions/workflows/quamba-ci.yml/badge.svg)
 [![Quamba2 arXiv](https://img.shields.io/badge/Quamba2-arXiv-b31b1b.svg)](https://arxiv.org/pdf/2503.22879)
 [![Quamba2 Page](https://img.shields.io/badge/Quamba2-Website-orange)](https://hychiang.info/projects/quamba2/)
 
