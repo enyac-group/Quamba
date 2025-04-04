@@ -19,7 +19,7 @@ jobs:
     # Use the specified Docker image
     container:
       image: hychiang/quamba-cuda-12.1:latest
-      options: --gpus all  # Enable GPU access if needed
+      options: --gpus all  --shm-size=64G # Enable GPU access if needed
       
     steps:
     - uses: actions/checkout@v4
@@ -40,19 +40,18 @@ jobs:
     #   run: |
     #     python -m venv venv
     #     source venv/bin/activate
+    # - name: Configure include path
+    #   run: |
+    #     CPATH=$pythonLocation/include/python3.10
+    #     echo "CPATH=$CPATH" >> $GITHUB_ENV
+
     - name: Use system Python
       shell: bash  # Ensures support for `source`
       run: |
         python --version
         python -m venv venv
         source venv/bin/activate
-        pip install -r requirements.txt
-    
-    - name: Configure include path
-      run: |
-        CPATH=$pythonLocation/include/python3.10
-        echo "CPATH=$CPATH" >> $GITHUB_ENV
-
+  
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip

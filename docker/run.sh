@@ -15,8 +15,11 @@ if [ "$(docker ps -a -q -f name=${CONTAINER_NAME})" ]; then
     #docker exec -it ${CONTAINER_NAME} "$@"
 else
     echo "Creating and running a new container ${CONTAINER_NAME}..."
+    # mount the current directory to /workspace to prevent some permission issues
+    echo "mount ${PWD} to /workspace"
     docker run -it --gpus all --name ${CONTAINER_NAME} \
-    -v "${PWD}:/home/user/Quamba:rw" \
+    -v "${PWD}:/workspace:rw" \
     --shm-size 64G \
-    "${IMAGE_NAME}" $@
+    "${IMAGE_NAME}" \
+    bash -c "cd /workspace && exec bash"
 fi
