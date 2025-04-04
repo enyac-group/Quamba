@@ -41,6 +41,7 @@ jobs:
     #     python -m venv venv
     #     source venv/bin/activate
     - name: Use system Python
+      shell: bash  # Ensures support for `source`
       run: |
         python3 --version
         python3 -m venv venv
