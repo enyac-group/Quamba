@@ -25,54 +25,53 @@ jobs:
     - uses: actions/checkout@v4
       with:
         submodules: recursive
-    # We run with docker, so we don’t need the pip cache:
+    # - name: Set up Python 3.10
+    #   uses: actions/setup-python@v3
+    #   with:
+    #     python-version: "3.10"
     # - name: Cache pip dependencies
     #   uses: actions/cache@v3
     #   with:
     #     path: ~/.cache/pip
     #     key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
     #     restore-keys: |
-    # we run with the python in docker image, so we don't need these steps to set up python
-    # - name: Set up Python 3.10
-    #   uses: actions/setup-python@v3
-    #   with:
-    #     python-version: "3.10"
     #       ${{ runner.os }}-pip-
     # - name: Create virtual environment
     #   run: |
     #     python -m venv venv
     #     source venv/bin/activate
-    # - name: Configure include path
-    #   run: |
-    #     CPATH=$pythonLocation/include/python3.10
-    #     echo "CPATH=$CPATH" >> $GITHUB_ENV
     - name: Use system Python
-      shell: bash  # Ensures support for `source` to solve `source: not found` error
+      shell: bash  # Ensures support for `source`
       run: |
-        python --version
-        python -m venv venv
+        python3 --version
+        python3 -m venv venv
         source venv/bin/activate
+        pip install -r requirements.txt
+    
+    - name: Configure include path
+      run: |
+        CPATH=$pythonLocation/include/python3.10
+        echo "CPATH=$CPATH" >> $GITHUB_ENV
+
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install wheel flake8 pytest
-    # - name: Lint with flake8
-    #   run: |
-    #     # stop the build if there are Python syntax errors or undefined names
-    #     flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-    #     # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
-    #     flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
-     # Not sure why Megatron-LM will force to install pytorch 2.6.0 and cuda libs,
-     # so we install Megatron-LM first then do `pip install -r requirements.txt` again here...
+        pip install -r requirements.txt
+        pip install flake8 pytest
+
+     # Not sure why Megatron-LM will force to install pytorch 2.5.1 and cuda libs
+     # , so we need to do `pip install -r requirements.txt` again here...
     - name: Build 3rdparty dependencies
       run: |
-        pip install -e 3rdparty/Megatron-LM
-        pip install -r requirements.txt
+        pip install wheel
         export FAST_HADAMARD_TRANSFORM_FORCE_BUILD=TRUE
         pip install -e 3rdparty/fast-hadamard-transform --no-build-isolation
         export MAMBA_FORCE_BUILD=TRUE
         pip install -e 3rdparty/mamba
         bash build_cutlass.sh
+        pip install -e 3rdparty/Megatron-LM
+        pip install -r requirements.txt
+
     - name: Check Environment
       run: |
         pwd
@@ -86,16 +85,25 @@ jobs:
         python -c "import mamba_ssm; print(mamba_ssm.__version__);"
         python -c "import megatron.core; print(megatron.core.__version__);"
       
+    # - name: Lint with flake8
+    #   run: |
+    #     # stop the build if there are Python syntax errors or undefined names
+    #     flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+    #     # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
+    #     flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
     - name: Build Quamba
       run: |
         rm -f *.so
         rm -rf build
-        rm -rf quamba.egg-info
+        rm -rf q_mamba.egg-info
         pip install -e .
+    
     - name: Test with pytest
       run: |
         export CUDA_VISIBLE_DEVICES=7
-        pytest quamba/tests --disable-warnings -v
+        pytest real_quant/test
+
     # test model quantization with generate.py and store the quantized models
     - name: Test generate.py
       run: |
@@ -112,6 +120,7 @@ jobs:
     #   run: |
     #     export CUDA_VISIBLE_DEVICES=7
     #     python generate.py state-spaces/mamba2-130m --prompt "My cat wrote all this CUDA code for a new language model and" --topp 0.9 --temperature 0.7 --repetition_penalty 1.2 --cache_graph --pretrained_dir pretrained_models/ --quantize --quantize_embedding --quantize_lm_head --w_bits 4 --apply_gptq --group_heads --hybrid_blocks --hybrid_blocks_config configs/hybrid/mamba2-8b/searched_1400_v3.json
+
     # test loading the stored quantized models with generate.py
     - name: Test loading quantized models
       run: |
