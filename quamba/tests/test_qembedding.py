@@ -19,8 +19,8 @@ class TestClass:
     params = {
         "test_batched_w8o16_qembedding": [
             dict(batch=1, seqlen=33, vocab_size=50288, embedding_dim=768),      # mamba2-130m
-            dict(batch=16, seqlen=33, vocab_size=50288, embedding_dim=2560),    # mamba2-2.7b
-            dict(batch=16, seqlen=1024, vocab_size=256000, embedding_dim=4096), # mamba2-8b
+            dict(batch=8, seqlen=33, vocab_size=50288, embedding_dim=2560),    # mamba2-2.7b
+            dict(batch=8, seqlen=1024, vocab_size=256000, embedding_dim=4096), # mamba2-8b
         ],
         "test_w8o16_qembedding": [
             dict(seqlen=33, vocab_size=50288, embedding_dim=768),       # mamba2-130m
@@ -29,8 +29,8 @@ class TestClass:
         ],
         "test_batched_w4o16_qembedding": [
             dict(batch=1, seqlen=33, vocab_size=50288, embedding_dim=768),      # mamba2-130m
-            dict(batch=16, seqlen=33, vocab_size=50288, embedding_dim=2560),    # mamba2-2.7b
-            dict(batch=16, seqlen=1024, vocab_size=256000, embedding_dim=4096), # mamba2-8b
+            dict(batch=8, seqlen=33, vocab_size=50288, embedding_dim=2560),    # mamba2-2.7b
+            dict(batch=8, seqlen=1024, vocab_size=256000, embedding_dim=4096), # mamba2-8b
         ],
         "test_w4o16_qembedding": [
             dict(seqlen=33, vocab_size=50288, embedding_dim=768),       # mamba2-130m

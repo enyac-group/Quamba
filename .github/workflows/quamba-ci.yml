@@ -19,7 +19,7 @@ jobs:
     # Use the specified Docker image
     container:
       image: hychiang/quamba-cuda-12.1:latest
-      options: --gpus all  --shm-size=64G # Enable GPU access if needed
+      options: --gpus all --shm-size=64G --memory=128g --memory-swap=128g
       
     steps:
     - uses: actions/checkout@v4
