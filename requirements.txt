@@ -7,7 +7,7 @@ peft==0.10.0
 huggingface_hub==0.27.0 # specified the version to avoid datasets api mismatch with huggingface hub
 datasets==2.19.0
 zstandard==0.23.0 # for datasets
-numpy==2.2.4 # degrade the version for transformers
+numpy==1.26.4 # degrade the version for transformers
 # megatron-core==0.10.0 # for mamba2-8b, we use our commit under 3rdparty/Megatron-LM
 sentencepiece==0.2.0 # for mamba2-8b tokenizer
 protobuf==4.25.2 # for mamba2-8b tokenizer google protobuf
