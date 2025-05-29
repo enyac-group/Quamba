@@ -112,11 +112,11 @@ jobs:
         python generate.py state-spaces/mamba2-130m --prompt "My cat wrote all this CUDA code for a new language model and" --topp 0.9 --temperature 0.7 --repetition_penalty 1.2 --cache_graph --pretrained_dir pretrained_models/ --quantize --quantize_embedding --quantize_lm_head --w_bits 4 --a_bits 8  --apply_gptq --group_heads
         python generate.py state-spaces/mamba2-130m --prompt "My cat wrote all this CUDA code for a new language model and" --topp 0.9 --temperature 0.7 --repetition_penalty 1.2 --cache_graph --pretrained_dir pretrained_models/ --quantize --quantize_embedding --quantize_lm_head --w_bits 4 --a_bits 16 --apply_gptq
     # test generate.py with w4ax hybrid model and store w4ax hybrid models
-    # we hack and apply the mamba2-8B hybrid config (searched_1400_v3.json) to state-spaces/mamba2-130m
-    # - name: Test w4ax hybrid generate.py
-    #   run: |
-    #     export CUDA_VISIBLE_DEVICES=7
-    #     python generate.py state-spaces/mamba2-130m --prompt "My cat wrote all this CUDA code for a new language model and" --topp 0.9 --temperature 0.7 --repetition_penalty 1.2 --cache_graph --pretrained_dir pretrained_models/ --quantize --quantize_embedding --quantize_lm_head --w_bits 4 --apply_gptq --group_heads --hybrid_blocks --hybrid_blocks_config configs/hybrid/mamba2-8b/searched_1400_v3.json
+    # we hack and apply the mamba2-8B hybrid config (hybrid_blocks_config.json) to state-spaces/mamba2-130m
+    - name: Test w4ax hybrid generate.py
+      run: |
+        export CUDA_VISIBLE_DEVICES=7
+        python generate.py state-spaces/mamba2-130m --prompt "My cat wrote all this CUDA code for a new language model and" --topp 0.9 --temperature 0.7 --repetition_penalty 1.2 --cache_graph --pretrained_dir pretrained_models/ --quantize --quantize_embedding --quantize_lm_head --w_bits 4 --apply_gptq --group_heads --hybrid_blocks --hybrid_blocks_config configs/hybrid/mamba2-8b/hybrid_blocks_config.json 
 
     # test loading the stored quantized models with generate.py
     - name: Test loading quantized models
@@ -129,11 +129,11 @@ jobs:
         python generate.py ut-enyac/quamba2-130m-w4a8  --prompt "My cat wrote all this CUDA code for a new language model and" --topp 0.9 --temperature 0.7 --repetition_penalty 1.2 --cache_graph --pretrained_dir pretrained_models/
         python generate.py ut-enyac/quamba2-130m-w4a16 --prompt "My cat wrote all this CUDA code for a new language model and" --topp 0.9 --temperature 0.7 --repetition_penalty 1.2 --cache_graph --pretrained_dir pretrained_models/
     # test loading the stored w4ax hybrid model with generate.py
-    # we hack and apply the mamba2-8B hybrid config (searched_1400_v3.json) to state-spaces/mamba2-130m
-    # - name: Test loading w4ax hybrid generate.py
-    #   run: |
-    #     export CUDA_VISIBLE_DEVICES=7
-    #     python generate.py ut-enyac/quamba2-130m-w4aX-searched_1400_v3 --prompt "My cat wrote all this CUDA code for a new language model and" --topp 0.9 --temperature 0.7 --repetition_penalty 1.2 --cache_graph --pretrained_dir pretrained_models/
+    # we hack and apply the mamba2-8B hybrid config (hybrid_blocks_config.json) to state-spaces/mamba2-130m
+    - name: Test loading w4ax hybrid generate.py
+      run: |
+        export CUDA_VISIBLE_DEVICES=7
+        python generate.py ut-enyac/quamba2-130m-w4aX-hybrid_blocks_config --prompt "My cat wrote all this CUDA code for a new language model and" --topp 0.9 --temperature 0.7 --repetition_penalty 1.2 --cache_graph --pretrained_dir pretrained_models/
     - name: Clean up pretrained models
       run: |
         rm -rf pretrained_models/ut-enyac/*
