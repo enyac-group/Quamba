@@ -106,7 +106,7 @@ pip install .
 | Models    | W8A8     |  W4A8       |  W4A16  |  W4AX |
 | --------- | ---------|-------------|--------------|------|
 | [Mamba1](https://huggingface.co/collections/ut-enyac/quamba-67edf67881154f4a12e41cb3)    | ✅  |  ✅ | ✅ | - |
-| [Mamba2](https://huggingface.co/collections/ut-enyac/quamba2-67edf74a0880f7fba8438cc3)    | ✅  |  ✅ | ✅ | TBD |
+| [Mamba2](https://huggingface.co/collections/ut-enyac/quamba2-67edf74a0880f7fba8438cc3)    | ✅  |  ✅ | ✅ | 8B |
 
 ✅ : support all sizes, *e.g*, Mamba2 130m/370m/780m/1.3b/2.7b/8b
 
