@@ -93,8 +93,8 @@ bash build_cutlass.sh
 - Install Megatron-LM
 ```bash
 pip install -e 3rdparty/Megatron-LM
-# Not sure why Megatron-LM will force to install pytorch 2.6.0+cu124
-# , so run `pip install -r requirements.txt` again if necessary
+# Not sure why Megatron-LM will force to install pytorch 2.6.0+cu124,
+# run `pip install -r requirements.txt` again if necessary
 ```
 
 ### Build Quamba
@@ -251,16 +251,16 @@ python main.py pretrained_models/mamba2-8b-converted \
 
 ## Citation
 ```
-@article{chiang2025quamba2,
-  title={Quamba2: A Robust and Scalable Post-training Quantization Framework for Selective State Space Models},
-  author={Chiang, Hung-Yueh and Chang, Chi-Chih and Frumkin, Natalia and Wu, Kai-Chiang, Abdelfattah, Mohamed S.  and Marculescu, Diana},
-  journal={International Conference on Machine Learning (ICML)},
-  year={2025}
+@inproceedings{chiang2025quamba2,
+  title = {Quamba2: A Robust and Scalable Post-training Quantization Framework for Selective State Space Models},
+  author = {Chiang, Hung-Yueh and Chang, Chi-Chih and Frumkin, Natalia and Wu, Kai-Chiang, Abdelfattah, Mohamed S.  and Marculescu, Diana},
+  booktitle = {Forty-Second International Conference on Machine Learning (ICML)},
+  year = {2025}
 }
 @inproceedings{chiang2025quamba,
   title = {Quamba: A Post-Training Quantization Recipe for Selective State Space Models},
   author = {Chiang*, Hung-Yueh and Chang*, Chi-Chih and Frumkin, Natalia and Wu, Kai-Chiang and Marculescu, Diana},
-  booktitle = {International Conference on Learning Representations (ICLR)},
+  booktitle = {The Thirteenth International Conference on Learning Representations (ICLR)},
   year = {2025},
 }
 ````
