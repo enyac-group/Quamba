@@ -63,11 +63,11 @@ def get_quantize_options(parser):
     # calibration parameters
     parser.add_argument(
         '--calib_data_num', type=int, default=512,
-        help='Number of calibration data'
+        help='Number of calibration data (default: 512)'
     )
     parser.add_argument(
         '--calib_seqlen', type=int, default=512,
-        help='Number of calibration data'
+        help='Maximum sequence length for calibration data (default: 512)'
     )
     # load/store model
     parser.add_argument(
@@ -94,7 +94,7 @@ def get_quantize_options(parser):
     )
     parser.add_argument(
         '--w_bits', type=int, default=8,
-        help='The bit-width for weights applied in the real quantization (defualt: 4)'
+        help='The bit-width for weights applied in the real quantization (defualt: 8)'
     )
     parser.add_argument(
         '--a_bits', type=int, default=8,
