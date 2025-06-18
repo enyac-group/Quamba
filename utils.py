@@ -94,11 +94,11 @@ def get_quantize_options(parser):
     )
     parser.add_argument(
         '--w_bits', type=int, default=8,
-        help='The bit-width for weights applied in the real quantization (defualt: 8)'
+        help='The bit-width for weights applied in the real quantization (default: 8)'
     )
     parser.add_argument(
         '--a_bits', type=int, default=8,
-        help='The bit-width for activations applied in the real quantization (defualt: 8)'
+        help='The bit-width for activations applied in the real quantization (default: 8)'
     )
     parser.add_argument(
         '--hybrid_blocks', action='store_true', default=False,
